@@ -1,0 +1,814 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fire Response Navigation</title>
+    <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://unpkg.com/aos@2.3.1/dist/aos.css" rel="stylesheet">
+    <script src="https://unpkg.com/aos@2.3.1/dist/aos.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/feather-icons/dist/feather.min.js"></script>
+    <script src="https://unpkg.com/feather-icons"></script>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://unpkg.com/leaflet-routing-machine@3.2.12/dist/leaflet-routing-machine.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.15.0/dist/tf.min.js"></script>
+    <link rel="stylesheet" href="css/styles.css">
+</head>
+<body class="bg-gray-100">
+    <!-- Location Detection Modal -->
+    <div id="locationModal" class="location-modal hidden">
+        <div class="location-modal-content">
+            <div id="locationRequestContent">
+                <div class="location-modal-icon">
+                    <i data-feather="map-pin" class="w-8 h-8 text-blue-500"></i>
+                </div>
+                <h3>Enable Location Services</h3>
+                <p>This application needs your location to provide accurate navigation. Your location data is only used for this session and is not stored.</p>
+                <div class="location-modal-buttons">
+                    <button id="allowLocation" class="location-modal-btn primary">Allow Location</button>
+                    <button id="denyLocation" class="location-modal-btn secondary">Skip for Now</button>
+                </div>
+            </div>
+            <div id="locationDetectingContent" class="location-detecting hidden">
+                <div class="location-detecting-spinner"></div>
+                <h3>Detecting Your Location</h3>
+                <p>Please wait while we determine your current position...</p>
+            </div>
+            <div id="locationErrorContent" class="hidden">
+                <div class="location-modal-icon">
+                    <i data-feather="alert-circle" class="w-8 h-8 text-red-500"></i>
+                </div>
+                <h3>Location Access Denied</h3>
+                <p>We couldn't access your location. You can still use the app by manually setting your location or searching for a destination.</p>
+                <div class="location-modal-buttons">
+                    <button id="closeLocationModal" class="location-modal-btn primary">Continue</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <!-- Mobile Menu Button -->
+    <div class="md:hidden fixed top-4 right-4 z-10">
+        <button id="mobileMenuBtn" class="mobile-menu-btn">
+            <i data-feather="menu" class="w-5 h-5 mx-auto"></i>
+            Menu
+        </button>
+    </div>
+    <!-- Overlay for mobile sidebar -->
+    <div id="overlay" class="overlay"></div>
+    <header class="fire-theme shadow-lg sticky top-0 z-10">
+        <div class="container mx-auto px-4 py-4 flex justify-between items-center">
+            <div class="flex items-center space-x-2">
+                <i data-feather="navigation" class="w-6 h-6 md:w-8 md:h-8"></i>
+                <h1 class="text-lg md:text-xl font-bold">Fire Response Navigation</h1>
+            </div>
+            <div class="flex items-center space-x-2 md:space-x-4">
+                <!-- Navigation Menu -->
+                <nav class="hidden md:flex space-x-4">
+                    <button class="nav-btn active" data-section="dashboard">
+                        <i data-feather="map" class="w-4 h-4 inline mr-1"></i> Dashboard
+                    </button>
+                    <button class="nav-btn" data-section="hydrants">
+                        <i data-feather="droplet" class="w-4 h-4 inline mr-1"></i> Hydrants
+                    </button>
+                    <button class="nav-btn" data-section="incidents">
+                        <i data-feather="database" class="w-4 h-4 inline mr-1"></i> Incidents
+                    </button>
+                    <a href="incidents-history.html" class="nav-btn">
+                        <i data-feather="list" class="w-4 h-4 inline mr-1"></i> History
+                    </a>
+                    <button class="nav-btn" data-section="contacts">
+                        <i data-feather="phone" class="w-4 h-4 inline mr-1"></i> Contacts
+                    </button>
+                </nav>
+                <div id="location-status" class="location-status location-inactive text-xs md:text-sm">Location Off</div>
+                <div id="current-time" class="text-sm md:text-lg"></div>
+            </div>
+        </div>
+    </header>
+    <main class="container mx-auto px-2 md:px-4 py-4 md:py-6">
+        <!-- Dashboard Section (Default) -->
+        <div id="dashboard-section" class="section active">
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-6">
+                <div class="lg:col-span-2 space-y-4 md:space-y-6">
+                    <!-- Map Section -->
+                    <div class="bg-white rounded-xl shadow-md overflow-hidden relative">
+                        <!-- Map Search Bar - ALIGNED with navigation header -->
+                        <div class="map-search-container">
+                            <div class="map-header-content">
+                                <h3 class="map-title">Live Navigation Map</h3>
+                                <div class="search-wrapper">
+                                    <div class="search-container">
+                                        <div class="search-input-container">
+                                            <div class="search-icon">
+                                                <i data-feather="search" class="w-4 h-4"></i>
+                                            </div>
+                                            <input type="text" id="mapSearchInput" class="search-input" placeholder="Search for a place or address in Santa Cruz, Laguna...">
+                                            <div id="mapSearchClear" class="search-clear">
+                                                <i data-feather="x" class="w-4 h-4"></i>
+                                            </div>
+                                        </div>
+                                        <div id="mapSearchResults" class="search-results"></div>
+                                    </div>
+                                </div>
+                                <div class="map-controls">
+                                    <button id="locateMe" class="px-3 py-2 bg-blue-500 text-white rounded-lg text-sm flex items-center space-x-1">
+                                        <i data-feather="target" class="w-4 h-4"></i>
+                                        <span class="hidden md:inline">Locate Me</span>
+                                    </button>
+                                    <button id="toggleTracking" class="px-3 py-2 bg-green-500 text-white rounded-lg text-sm flex items-center space-x-1">
+                                        <i data-feather="map-pin" class="w-4 h-4"></i>
+                                        <span class="hidden md:inline">Start Tracking</span>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                      
+                        <div id="map" class="w-full"></div>
+                    </div>
+                  
+                    <!-- Route Information -->
+                    <div class="route-info rounded-xl shadow-md p-4 md:p-6 hidden" id="routeInfo">
+                        <h3 class="text-lg md:text-xl font-bold mb-3 md:mb-4 text-red-800">Navigation Information</h3>
+                      
+                        <!-- Current Route Summary -->
+                        <div class="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-4 mb-4">
+                            <div class="bg-white p-2 md:p-4 rounded-lg shadow-sm">
+                                <div class="flex items-center space-x-1 md:space-x-2">
+                                    <i data-feather="clock" class="text-red-600 w-4 h-4"></i>
+                                    <span class="font-semibold text-xs md:text-sm">ETA:</span>
+                                </div>
+                                <p class="text-sm md:text-lg mt-1 md:mt-2" id="eta"></p>
+                            </div>
+                            <div class="bg-white p-2 md:p-4 rounded-lg shadow-sm">
+                                <div class="flex items-center space-x-1 md:space-x-2">
+                                    <i data-feather="map-pin" class="text-red-600 w-4 h-4"></i>
+                                    <span class="font-semibold text-xs md:text-sm">Distance:</span>
+                                </div>
+                                <p class="text-sm md:text-lg mt-1 md:mt-2" id="distance"></p>
+                            </div>
+                            <div class="bg-white p-2 md:p-4 rounded-lg shadow-sm">
+                                <div class="flex items-center space-x-1 md:space-x-2">
+                                    <i data-feather="navigation" class="text-red-600 w-4 h-4"></i>
+                                    <span class="font-semibold text-xs md:text-sm">Speed:</span>
+                                </div>
+                                <p class="text-sm md:text-lg mt-1 md:mt-2" id="speed">-- km/h</p>
+                            </div>
+                            <div class="bg-white p-2 md:p-4 rounded-lg shadow-sm">
+                                <div class="flex items-center space-x-1 md:space-x-2">
+                                    <i data-feather="compass" class="text-red-600 w-4 h-4"></i>
+                                    <span class="font-semibold text-xs md:text-sm">Heading:</span>
+                                </div>
+                                <p class="text-sm md:text-lg mt-1 md:mt-2" id="heading">--°</p>
+                            </div>
+                        </div>
+                      
+                        <!-- Alternative Routes Section -->
+                        <div class="mt-4">
+                            <h4 class="font-bold text-md mb-3 text-gray-800">Alternative Routes</h4>
+                            <div id="alternativeRoutes" class="space-y-3">
+                                <!-- Alternative routes will be populated here -->
+                            </div>
+                        </div>
+                      
+                        <div class="mt-3 md:mt-4 bg-white p-2 md:p-4 rounded-lg shadow-sm">
+                            <div class="flex items-center space-x-1 md:space-x-2 mb-1 md:mb-2">
+                                <i data-feather="alert-circle" class="text-red-600 w-4 h-4"></i>
+                                <span class="font-semibold text-xs md:text-sm">Next Instruction:</span>
+                            </div>
+                            <p class="text-sm md:text-lg" id="instructions"></p>
+                        </div>
+                    </div>
+                </div>
+                <!-- Sidebar Content -->
+                <div class="sidebar space-y-4 md:space-y-6">
+                    <button id="closeSidebar" class="md:hidden absolute top-4 right-4 text-gray-500">
+                        <i data-feather="x" class="w-6 h-6"></i>
+                    </button>
+     
+                    <!-- Mobile Navigation -->
+                    <div class="md:hidden space-y-2 mb-4">
+                        <button class="nav-btn-mobile active" data-section="dashboard">
+                            <i data-feather="map" class="w-4 h-4"></i> Dashboard
+                        </button>
+                        <button class="nav-btn-mobile" data-section="hydrants">
+                            <i data-feather="droplet" class="w-4 h-4"></i> Hydrants
+                        </button>
+                        <button class="nav-btn-mobile" data-section="incidents">
+                            <i data-feather="database" class="w-4 h-4"></i> Incident Reports
+                        </button>
+                        <button class="nav-btn-mobile" data-section="contacts">
+                            <i data-feather="phone" class="w-4 h-4"></i> Emergency Contacts
+                        </button>
+                    </div>
+     
+                    <!-- Weather Card -->
+                    <div class="weather-card rounded-xl shadow-md p-4 md:p-6">
+                        <div class="flex justify-between items-center mb-3 md:mb-4">
+                            <h3 class="text-lg md:text-xl font-bold text-gray-800">Current Weather</h3>
+                            <i data-feather="cloud" class="w-5 h-5 md:w-6 md:h-6 text-blue-500"></i>
+                        </div>
+                        <div id="weather-info" class="space-y-2 md:space-y-4">
+                            <div class="flex justify-between">
+                                <span class="font-medium text-sm md:text-base">Location:</span>
+                                <span id="weather-location" class="font-semibold text-sm md:text-base">Santa Cruz, Laguna</span>
+                            </div>
+                            <div class="flex justify-between">
+                                <span class="font-medium text-sm md:text-base">Temperature:</span>
+                                <span id="weather-temp" class="font-semibold text-sm md:text-base">--°C</span>
+                            </div>
+                            <div class="flex justify-between">
+                                <span class="font-medium text-sm md:text-base">Condition:</span>
+                                <span id="weather-condition" class="font-semibold text-sm md:text-base">--</span>
+                            </div>
+                            <div class="flex justify-between">
+                                <span class="font-medium text-sm md:text-base">Humidity:</span>
+                                <span id="weather-humidity" class="font-semibold text-sm md:text-base">--%</span>
+                            </div>
+                            <div class="flex justify-between">
+                                <span class="font-medium text-sm md:text-base">Wind:</span>
+                                <span id="weather-wind" class="font-semibold text-sm md:text-base">-- km/h</span>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- Incident Details -->
+                    <div class="bg-white rounded-xl shadow-md p-4 md:p-6">
+                        <h3 class="text-lg md:text-xl font-bold mb-3 md:mb-4 text-gray-800">Incident Details</h3>
+                        <div class="space-y-3 md:space-y-4">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1 md:mb-2">Type of Occupancy</label>
+                                <select id="occupancyType" class="w-full p-2 md:p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500 text-sm md:text-base">
+                                    <option value="Residential">Residential</option>
+                                    <option value="Business">Business</option>
+                                    <option value="Industrial">Industrial</option>
+                                    <option value="Educational">Educational</option>
+                                    <option value="Mercantile">Mercantile</option>
+                                    <option value="Storage">Storage</option>
+                                    <option value="Grass">Grass/Forest</option>
+                                    <option value="Other">Other</option>
+                                </select>
+                            </div>
+                            <div class="bg-yellow-50 p-2 md:p-3 rounded-lg">
+                                <div class="flex items-center space-x-1 md:space-x-2">
+                                    <i data-feather="map-pin" class="w-3 h-3 md:w-4 md:h-4 text-yellow-600"></i>
+                                    <span class="text-xs md:text-sm font-medium">Use the search bar on the map to set incident location</span>
+                                </div>
+                            </div>
+                         
+                            <button id="calculateRoute" class="w-full py-2 md:py-3 bg-red-600 hover:bg-red-700 text-white font-medium rounded-lg transition duration-200 flex items-center justify-center space-x-1 md:space-x-2 text-sm md:text-base">
+                                <i data-feather="navigation" class="w-4 h-4 md:w-5 md:h-5"></i>
+                                <span>Start Navigation</span>
+                            </button>
+                        </div>
+                    </div>
+                    <!-- Nearest Hydrant Information -->
+                    <div id="nearestHydrantCard" class="nearest-hydrant-info rounded-xl shadow-md p-4 md:p-6 hidden">
+                        <div class="flex justify-between items-center mb-3 md:mb-4">
+                            <h3 class="text-lg md:text-xl font-bold text-blue-800">Nearest Fire Hydrant</h3>
+                            <i data-feather="droplet" class="w-5 h-5 md:w-6 md:h-6 text-blue-500"></i>
+                        </div>
+                        <div id="nearest-hydrant-content" class="space-y-2 md:space-y-3">
+                            <div class="flex justify-between">
+                                <span class="font-medium text-sm md:text-base">Distance:</span>
+                                <span id="hydrant-distance" class="font-semibold text-sm md:text-base">--</span>
+                            </div>
+                            <div class="flex justify-between">
+                                <span class="font-medium text-sm md:text-base">Condition:</span>
+                                <span id="hydrant-condition" class="font-semibold text-sm md:text-base">--</span>
+                            </div>
+                            <div class="flex justify-between">
+                                <span class="font-medium text-sm md:text-base">Pressure:</span>
+                                <span id="hydrant-pressure" class="font-semibold text-sm md:text-base">--</span>
+                            </div>
+                            <div class="flex justify-between">
+                                <span class="font-medium text-sm md:text-base">Coordinates:</span>
+                                <span id="hydrant-coords" class="font-semibold text-sm md:text-base">--</span>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- Fire Hydrant Legend Card -->
+                    <div class="bg-white rounded-xl shadow-md p-4 md:p-6">
+                        <h3 class="text-lg md:text-xl font-bold mb-3 md:mb-4 text-gray-800">Fire Hydrant Legend</h3>
+                        <div class="space-y-3">
+                            <div class="flex items-center">
+                                <svg class="hydrant-icon operational" width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="margin-right: 10px;">
+                                    <path d="M12 2C8.13 2 5 5.13 5 9C5 14.25 12 22 12 22C12 22 19 14.25 19 9C19 5.13 15.87 2 12 2Z" fill="#3B82F6"/>
+                                    <path d="M12 6C10.34 6 9 7.34 9 9C9 10.66 10.34 12 12 12C13.66 12 15 10.66 15 9C15 7.34 13.66 6 12 6Z" fill="white"/>
+                                    <path d="M12 2V6" stroke="white" stroke-width="2"/>
+                                    <path d="M9 9H15" stroke="white" stroke-width="2"/>
+                                </svg>
+                                <span class="text-sm">Operational Hydrant</span>
+                            </div>
+                            <div class="flex items-center">
+                                <svg class="hydrant-icon unserviceable" width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="margin-right: 10px;">
+                                    <path d="M12 2C8.13 2 5 5.13 5 9C5 14.25 12 22 12 22C12 22 19 14.25 19 9C19 5.13 15.87 2 12 2Z" fill="#3B82F6"/>
+                                    <path d="M12 6C10.34 6 9 7.34 9 9C9 10.66 10.34 12 12 12C13.66 12 15 10.66 15 9C15 7.34 13.66 6 12 6Z" fill="white"/>
+                                    <path d="M12 2V6" stroke="white" stroke-width="2"/>
+                                    <path d="M9 9H15" stroke="white" stroke-width="2"/>
+                                </svg>
+                                <span class="text-sm">Unserviceable Hydrant</span>
+                            </div>
+                            <div class="flex items-center">
+                                <svg class="hydrant-icon nearest" width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="margin-right: 10px;">
+                                    <path d="M12 2C8.13 2 5 5.13 5 9C5 14.25 12 22 12 22C12 22 19 14.25 19 9C19 5.13 15.87 2 12 2Z" fill="#3B82F6"/>
+                                    <path d="M12 6C10.34 6 9 7.34 9 9C9 10.66 10.34 12 12 12C13.66 12 15 10.66 15 9C15 7.34 13.66 6 12 6Z" fill="white"/>
+                                    <path d="M12 2V6" stroke="white" stroke-width="2"/>
+                                    <path d="M9 9H15" stroke="white" stroke-width="2"/>
+                                </svg>
+                                <span class="text-sm">Nearest Hydrant (≤50ft)</span>
+                            </div>
+                            <div class="border-t pt-2 mt-2">
+                                <p class="text-xs text-gray-600">Only hydrants within 50 feet are highlighted with special markers and connection lines.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <!-- Incident Reports Section -->
+        <div id="incidents-section" class="section hidden">
+            <div class="max-w-6xl mx-auto">
+                <div class="bg-white rounded-xl shadow-md p-6 mb-6">
+                    <h2 class="text-2xl font-bold mb-6 text-blue-800 flex items-center">
+                        <i data-feather="database" class="w-8 h-8 mr-3 text-blue-500"></i>
+                        Incident Reporting System
+                    </h2>
+                 
+                    <!-- Incident Learning System -->
+                    <div class="feedback-card rounded-xl shadow-md p-4 md:p-6 mb-6">
+                        <div class="flex justify-between items-center mb-3 md:mb-4">
+                            <h3 class="text-lg md:text-xl font-bold text-blue-800">Incident Learning System</h3>
+                            <i data-feather="database" class="w-5 h-5 md:w-6 md:h-6 text-blue-500"></i>
+                        </div>
+                     
+                        <!-- Model Status -->
+                        <div class="mb-4">
+                            <div class="flex justify-between items-center mb-2">
+                                <span class="font-medium">Model Status:</span>
+                                <span id="modelStatus" class="training-status status-ready">Ready</span>
+                            </div>
+                            <div class="model-metrics">
+                                <div class="flex justify-between text-xs mb-1">
+                                    <span>Training Data:</span>
+                                    <span id="trainingCount">0 incidents</span>
+                                </div>
+                                <div class="metric-bar">
+                                    <div id="trainingProgress" class="metric-fill" style="width: 0%"></div>
+                                </div>
+                             
+                                <div class="flex justify-between text-xs mb-1 mt-3">
+                                    <span>Model Accuracy:</span>
+                                    <span id="modelAccuracy">--%</span>
+                                </div>
+                                <div class="metric-bar">
+                                    <div id="accuracyBar" class="metric-fill" style="width: 0%"></div>
+                                </div>
+                             
+                                <div class="flex justify-between text-xs mb-1 mt-3">
+                                    <span>Last Retrained:</span>
+                                    <span id="lastRetrained">Never</span>
+                                </div>
+                            </div>
+                        </div>
+                        <!-- Manual Training Controls -->
+                        <div class="mt-4 flex space-x-2">
+                            <button id="manualTrainBtn" class="flex-1 bg-purple-500 text-white py-2 rounded text-sm hover:bg-purple-600 transition flex items-center justify-center">
+                                <i data-feather="refresh-cw" class="w-4 h-4 mr-2"></i>
+                                Train Model Now
+                            </button>
+                            <button id="checkStatusBtn" class="flex-1 bg-gray-500 text-white py-2 rounded text-sm hover:bg-gray-600 transition flex items-center justify-center">
+                                <i data-feather="bar-chart-2" class="w-4 h-4 mr-2"></i>
+                                Check Status
+                            </button>
+                        </div>
+                    </div>
+                    <!-- Performance Analysis Section -->
+                    <div class="mt-6">
+                        <h3 class="text-lg font-semibold mb-3 flex items-center">
+                            <i data-feather="bar-chart-2" class="w-5 h-5 mr-2"></i>
+                            Performance Analysis
+                        </h3>
+                        <div id="performanceFeedback" class="bg-white rounded-lg shadow-sm border border-gray-200 p-4 min-h-[200px] transition-all duration-300">
+                            <div class="text-center text-gray-500 py-8">
+                                <i data-feather="bar-chart-2" class="w-8 h-8 mx-auto mb-2 opacity-50"></i>
+                                <p class="text-sm">Submit an incident report to see performance analysis</p>
+                                <p class="text-xs text-gray-400 mt-1">Response times will be compared with similar distance incidents</p>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- Detailed Incident Report Form -->
+                    <div class="bg-white rounded-xl shadow-md p-6 mt-6">
+                        <h3 class="text-2xl font-bold mb-6 text-blue-800 flex items-center">
+                            <i data-feather="file-text" class="w-8 h-8 mr-3 text-blue-500"></i>
+                            Fire Incident Report Form
+                        </h3>
+                     
+                        <form id="incidentReportForm" class="space-y-6">
+                            <!-- Station Information -->
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-2">Station *</label>
+                                    <input type="text" id="station" name="station" value="Santa Cruz, Laguna"
+                                           class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500" readonly>
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-2">Date of Response *</label>
+                                    <input type="date" id="date_of_response" name="date_of_response"
+                                           class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500" required>
+                                </div>
+                            </div>
+                            <!-- Location Information -->
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-2">Location *</label>
+                                <input type="text" id="location" name="location" placeholder="Brgy. Gatid, Santa Cruz, Laguna"
+                                       class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500" required>
+                            </div>
+                            <!-- Time Information -->
+                            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-2">Time Received *</label>
+                                    <input type="time" id="time_received" name="time_received"
+                                           class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500" required>
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-2">Time Dispatched *</label>
+                                    <input type="time" id="time_dispatched" name="time_dispatched"
+                                           class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500" required>
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-2">Time Arrival *</label>
+                                    <input type="time" id="time_arrival" name="time_arrival"
+                                           class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500" required>
+                                </div>
+                            </div>
+                            <!-- Response Metrics -->
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-2">Response Time (minutes) *</label>
+                                    <input type="number" id="response_time_min" name="response_time_min" placeholder="5" min="0"
+                                           class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-gray-50"
+                                           readonly required>
+                                    <p class="text-xs text-gray-500 mt-1">Automatically calculated from time received and arrival</p>
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-2">Distance (km) *</label>
+                                    <input type="number" step="0.1" id="distance" name="distance" placeholder="4.6" min="0"
+                                           class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500" required>
+                                </div>
+                            </div>
+                            <!-- Incident Details -->
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-2">Responding Unit *</label>
+                                    <select id="responding_unit" name="responding_unit" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500" required>
+                                        <option value="">Select Unit</option>
+                                        <option value="Shift A">Shift A</option>
+                                        <option value="Shift B">Shift B</option>
+                                        <option value="Shift C">Shift C</option>
+                                        <option value="Special Unit">Special Unit</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-2">Alarm Status *</label>
+                                    <select id="alarm_status" name="alarm_status" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500" required>
+                                        <option value="">Select Status</option>
+                                        <option value="FA">FA (Fire Alarm)</option>
+                                        <option value="GS">GS (General Signal)</option>
+                                        <option value="SA">SA (Still Alarm)</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <!-- Type of Occupancy -->
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-2">Type of Occupancy *</label>
+                                <select id="type_of_occupancy" name="type_of_occupancy" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500" required>
+                                    <option value="">Select Type</option>
+                                    <option value="Residential">Residential</option>
+                                    <option value="Business">Business</option>
+                                    <option value="Industrial">Industrial</option>
+                                    <option value="Educational">Educational</option>
+                                    <option value="Mercantile">Mercantile</option>
+                                    <option value="Storage">Storage</option>
+                                    <option value="Grass/Forest">Grass/Forest</option>
+                                    <option value="Vehicle">Vehicle</option>
+                                    <option value="Other">Other</option>
+                                </select>
+                            </div>
+                            <!-- Casualty Information -->
+                            <div class="bg-red-50 p-4 rounded-lg">
+                                <h3 class="font-bold text-red-800 mb-4">Casualty Information</h3>
+                                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div>
+                                        <label class="block text-sm font-medium text-red-700 mb-2">Injured Civilians</label>
+                                        <input type="number" id="injured_civ" name="injured_civ" value="0" min="0"
+                                               class="w-full p-3 border border-red-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500">
+                                    </div>
+                                    <div>
+                                        <label class="block text-sm font-medium text-red-700 mb-2">Injured BFP Personnel</label>
+                                        <input type="number" id="injured_bfp" name="injured_bfp" value="0" min="0"
+                                               class="w-full p-3 border border-red-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500">
+                                    </div>
+                                    <div>
+                                        <label class="block text-sm font-medium text-red-700 mb-2">Civilian Deaths</label>
+                                        <input type="number" id="death_civ" name="death_civ" value="0" min="0"
+                                               class="w-full p-3 border border-red-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500">
+                                    </div>
+                                    <div>
+                                        <label class="block text-sm font-medium text-red-700 mb-2">BFP Personnel Deaths</label>
+                                        <input type="number" id="death_bfp" name="death_bfp" value="0" min="0"
+                                               class="w-full p-3 border border-red-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500">
+                                    </div>
+                                </div>
+                            </div>
+                            <!-- Weather Information -->
+                            <div class="bg-blue-50 p-4 rounded-lg">
+                                <h3 class="font-bold text-blue-800 mb-4">Weather Conditions</h3>
+                                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div>
+                                        <label class="block text-sm font-medium text-blue-700 mb-2">Temperature (°C) *</label>
+                                        <input type="number" step="0.1" id="temperature_c" name="temperature_c" placeholder="27.4"
+                                               class="w-full p-3 border border-blue-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500" required>
+                                    </div>
+                                    <div>
+                                        <label class="block text-sm font-medium text-blue-700 mb-2">Humidity (%) *</label>
+                                        <input type="number" id="humidity_pct" name="humidity_pct" placeholder="84"
+                                               class="w-full p-3 border border-blue-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500" required>
+                                    </div>
+                                    <div>
+                                        <label class="block text-sm font-medium text-blue-700 mb-2">Wind Speed (km/h) *</label>
+                                        <input type="number" step="0.1" id="wind_speed_kmh" name="wind_speed_kmh" placeholder="14.2"
+                                               class="w-full p-3 border border-blue-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500" required>
+                                    </div>
+                                    <div>
+                                        <label class="block text-sm font-medium text-blue-700 mb-2">Precipitation (mm) *</label>
+                                        <input type="number" step="0.1" id="precipitation_mm" name="precipitation_mm" placeholder="5.1"
+                                               class="w-full p-3 border border-blue-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500" required>
+                                    </div>
+                                </div>
+                                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+                                    <div>
+                                        <label class="block text-sm font-medium text-blue-700 mb-2">Weather Condition *</label>
+                                        <select id="weather_condition" name="weather_condition" class="w-full p-3 border border-blue-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500" required>
+                                            <option value="">Select Condition</option>
+                                            <option value="Sunny">Sunny</option>
+                                            <option value="Cloudy">Cloudy</option>
+                                            <option value="Rainy">Rainy</option>
+                                            <option value="Stormy">Stormy</option>
+                                            <option value="Clear">Clear</option>
+                                            <option value="Partly Cloudy">Partly Cloudy</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label class="block text-sm font-medium text-blue-700 mb-2">Road Condition *</label>
+                                        <select id="road_condition" name="road_condition" class="w-full p-3 border border-blue-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500" required>
+                                            <option value="">Select Condition</option>
+                                            <option value="Dry">Dry</option>
+                                            <option value="Wet">Wet</option>
+                                            <option value="Flooded">Flooded</option>
+                                            <option value="Muddy">Muddy</option>
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
+                            <!-- Remarks -->
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-2">Remarks</label>
+                                <textarea id="remarks" name="remarks" placeholder="Case details and additional information..."
+                                          class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 h-24">Case Closed</textarea>
+                            </div>
+                            <!-- Form Actions -->
+                            <div class="flex space-x-4 pt-4">
+                                <button type="button" onclick="populateWithCurrentData()"
+                                        class="px-6 py-3 bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition flex items-center">
+                                    <i data-feather="refresh-cw" class="w-4 h-4 mr-2"></i>
+                                    Auto-Fill Current Data
+                                </button>
+                                <button type="submit"
+                                        class="flex-1 px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition flex items-center justify-center">
+                                    <i data-feather="save" class="w-4 h-4 mr-2"></i>
+                                    Save Incident Report
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <!-- Fire Hydrants Section -->
+        <div id="hydrants-section" class="section hidden">
+            <div class="max-w-7xl mx-auto">
+                <div class="bg-white rounded-xl shadow-md p-6">
+                    <div class="flex justify-between items-center mb-6">
+                        <h2 class="text-2xl font-bold text-blue-800 flex items-center">
+                            <i data-feather="droplet" class="w-8 h-8 mr-3 text-blue-500"></i>
+                            Fire Hydrants Management
+                        </h2>
+                        <button id="addHydrantBtn" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition flex items-center">
+                            <i data-feather="plus" class="w-4 h-4 mr-2"></i>
+                            Add Hydrant
+                        </button>
+                    </div>
+
+                    <!-- Add/Edit Hydrant Form -->
+                    <div id="hydrantFormContainer" class="hidden mb-6 p-4 bg-gray-50 rounded-lg border-2 border-blue-200">
+                        <h3 class="text-lg font-semibold mb-4">
+                            <span id="formTitle">Add New Hydrant</span>
+                        </h3>
+                        <form id="hydrantForm" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <input type="hidden" id="hydrantId">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-2">Hydrant Number *</label>
+                                <input type="text" id="hydrantNumber" required
+                                    class="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+                                    placeholder="e.g., H-001">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-2">Status *</label>
+                                <select id="hydrantStatus" required
+                                    class="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500">
+                                    <option value="operational">Operational</option>
+                                    <option value="maintenance">Under Maintenance</option>
+                                    <option value="damaged">Damaged</option>
+                                    <option value="unserviceable">Unserviceable</option>
+                                    <option value="inactive">Inactive</option>
+                                </select>
+                            </div>
+                            <div class="md:col-span-2">
+                                <label class="block text-sm font-medium text-gray-700 mb-2">Exact Address *</label>
+                                <input type="text" id="hydrantAddress" required
+                                    class="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+                                    placeholder="e.g., Corner of Main St. and 1st Ave, Santa Cruz, Laguna">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-2">Latitude *</label>
+                                <input type="number" id="hydrantLat" required step="0.000001"
+                                    class="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+                                    placeholder="e.g., 14.2791">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-2">Longitude *</label>
+                                <input type="number" id="hydrantLng" required step="0.000001"
+                                    class="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+                                    placeholder="e.g., 121.4160">
+                            </div>
+                            <div class="md:col-span-2">
+                                <label class="block text-sm font-medium text-gray-700 mb-2">Remarks</label>
+                                <textarea id="hydrantRemarks" rows="2"
+                                    class="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+                                    placeholder="Additional notes about this hydrant..."></textarea>
+                            </div>
+                            <div class="md:col-span-2 flex gap-3">
+                                <button type="submit"
+                                    class="flex-1 px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition flex items-center justify-center">
+                                    <i data-feather="save" class="w-4 h-4 mr-2"></i>
+                                    <span id="submitBtnText">Save Hydrant</span>
+                                </button>
+                                <button type="button" id="cancelHydrantBtn"
+                                    class="px-6 py-3 bg-gray-400 text-white rounded-lg hover:bg-gray-500 transition">
+                                    Cancel
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+
+                    <!-- Hydrants List -->
+                    <div id="hydrantsListContainer">
+                        <div class="mb-4 flex gap-2">
+                            <input type="text" id="hydrantSearch" placeholder="Search hydrants..."
+                                class="flex-1 px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500">
+                            <select id="hydrantStatusFilter" 
+                                class="px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500">
+                                <option value="all">All Status</option>
+                                <option value="operational">Operational</option>
+                                <option value="maintenance">Maintenance</option>
+                                <option value="damaged">Damaged</option>
+                                <option value="unserviceable">Unserviceable</option>
+                                <option value="inactive">Inactive</option>
+                            </select>
+                        </div>
+                        <div class="overflow-x-auto">
+                            <table class="min-w-full bg-white border">
+                                <thead class="bg-gray-100">
+                                    <tr>
+                                        <th class="px-4 py-3 text-left text-sm font-semibold text-gray-700">Hydrant #</th>
+                                        <th class="px-4 py-3 text-left text-sm font-semibold text-gray-700">Address</th>
+                                        <th class="px-4 py-3 text-left text-sm font-semibold text-gray-700">Coordinates</th>
+                                        <th class="px-4 py-3 text-left text-sm font-semibold text-gray-700">Status</th>
+                                        <th class="px-4 py-3 text-left text-sm font-semibold text-gray-700">Remarks</th>
+                                        <th class="px-4 py-3 text-center text-sm font-semibold text-gray-700">Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="hydrantsTableBody">
+                                    <tr>
+                                        <td colspan="6" class="px-4 py-8 text-center text-gray-500">
+                                            <i data-feather="droplet" class="w-12 h-12 mx-auto mb-2 text-gray-300"></i>
+                                            <p>No hydrants found. Click "Add Hydrant" to get started.</p>
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <!-- Emergency Contacts Section -->
+        <div id="contacts-section" class="section hidden">
+            <div class="max-w-4xl mx-auto">
+                <div class="bg-white rounded-xl shadow-md p-6">
+                    <h2 class="text-2xl font-bold mb-6 text-blue-800 flex items-center">
+                        <i data-feather="phone" class="w-8 h-8 mr-3 text-blue-500"></i>
+                        Emergency Contacts
+                    </h2>
+                    <div class="space-y-4">
+                        <div class="flex items-center space-x-4 p-4 md:p-6 bg-red-50 rounded-lg border-l-4 border-red-500">
+                            <div class="p-3 bg-red-100 rounded-full">
+                                <i data-feather="phone" class="w-6 h-6 md:w-8 md:h-8 text-red-600"></i>
+                            </div>
+                            <div class="flex-1">
+                                <h3 class="font-bold text-lg md:text-xl text-red-800">BFP Emergency</h3>
+                                <p class="text-red-600 text-lg md:text-xl font-semibold">(049) 808-1234</p>
+                                <p class="text-sm text-gray-600 mt-1">Bureau of Fire Protection - Santa Cruz, Laguna</p>
+                            </div>
+                        </div>
+                      
+                        <div class="flex items-center space-x-4 p-4 md:p-6 bg-blue-50 rounded-lg border-l-4 border-blue-500">
+                            <div class="p-3 bg-blue-100 rounded-full">
+                                <i data-feather="shield" class="w-6 h-6 md:w-8 md:h-8 text-blue-600"></i>
+                            </div>
+                            <div class="flex-1">
+                                <h3 class="font-bold text-lg md:text-xl text-blue-800">Police Station</h3>
+                                <p class="text-blue-600 text-lg md:text-xl font-semibold">(049) 808-5678</p>
+                                <p class="text-sm text-gray-600 mt-1">Santa Cruz Municipal Police Station</p>
+                            </div>
+                        </div>
+                      
+                        <div class="flex items-center space-x-4 p-4 md:p-6 bg-green-50 rounded-lg border-l-4 border-green-500">
+                            <div class="p-3 bg-green-100 rounded-full">
+                                <i data-feather="heart" class="w-6 h-6 md:w-8 md:h-8 text-green-600"></i>
+                            </div>
+                            <div class="flex-1">
+                                <h3 class="font-bold text-lg md:text-xl text-green-800">Hospital</h3>
+                                <p class="text-green-600 text-lg md:text-xl font-semibold">(049) 808-9012</p>
+                                <p class="text-sm text-gray-600 mt-1">Santa Cruz Community Hospital</p>
+                            </div>
+                        </div>
+                      
+                        <div class="flex items-center space-x-4 p-4 md:p-6 bg-purple-50 rounded-lg border-l-4 border-purple-500">
+                            <div class="p-3 bg-purple-100 rounded-full">
+                                <i data-feather="tool" class="w-6 h-6 md:w-8 md:h-8 text-purple-600"></i>
+                            </div>
+                            <div class="flex-1">
+                                <h3 class="font-bold text-lg md:text-xl text-purple-800">Municipal Disaster Office</h3>
+                                <p class="text-purple-600 text-lg md:text-xl font-semibold">(049) 808-3456</p>
+                                <p class="text-sm text-gray-600 mt-1">Emergency Operations Center</p>
+                            </div>
+                        </div>
+                    </div>
+                  
+                    <div class="mt-8 p-4 bg-yellow-50 rounded-lg border-l-4 border-yellow-500">
+                        <h4 class="font-bold text-lg text-yellow-800 mb-2">Emergency Procedures</h4>
+                        <ul class="text-sm text-gray-700 space-y-2">
+                            <li class="flex items-start">
+                                <i data-feather="alert-triangle" class="w-4 h-4 text-yellow-600 mr-2 mt-0.5"></i>
+                                <span>In case of fire emergency, call BFP immediately and provide clear location details</span>
+                            </li>
+                            <li class="flex items-start">
+                                <i data-feather="alert-triangle" class="w-4 h-4 text-yellow-600 mr-2 mt-0.5"></i>
+                                <span>For medical emergencies, contact the hospital and provide patient condition details</span>
+                            </li>
+                            <li class="flex items-start">
+                                <i data-feather="alert-triangle" class="w-4 h-4 text-yellow-600 mr-2 mt-0.5"></i>
+                                <span>For security concerns, contact the police station with specific incident information</span>
+                            </li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+    <!-- Mobile Controls -->
+    <div class="mobile-controls">
+        <button id="mobileLocate" class="mobile-control-btn bg-blue-500 text-white">
+            <i data-feather="target" class="w-5 h-5 mb-1"></i>
+            <span class="text-xs">Locate</span>
+        </button>
+        <button id="mobileTrack" class="mobile-control-btn bg-green-500 text-white">
+            <i data-feather="map-pin" class="w-5 h-5 mb-1"></i>
+            <span class="text-xs">Track</span>
+        </button>
+        <button id="mobileNavigate" class="mobile-control-btn bg-red-600 text-white">
+            <i data-feather="navigation" class="w-5 h-5 mb-1"></i>
+            <span class="text-xs">Navigate</span>
+        </button>
+        <button id="mobileMenu" class="mobile-control-btn bg-gray-600 text-white">
+            <i data-feather="menu" class="w-5 h-5 mb-1"></i>
+            <span class="text-xs">Menu</span>
+        </button>
+    </div>
+    <script src="js/script.js"></script>
+    <script src="js/hydrants-manager.js"></script>
+</body>
+</html>

@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Incidents History - Fire Response System</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/feather-icons"></script>
+    <link rel="stylesheet" href="css/styles.css">
+</head>
+<body class="bg-gray-100">
+    <!-- Header matching dashboard -->
+    <header class="fire-theme shadow-lg sticky top-0 z-10" style="background: linear-gradient(135deg, #dc2626 0%, #991b1b 100%); color: white;">
+        <div class="container mx-auto px-4 py-4 flex justify-between items-center">
+            <div class="flex items-center space-x-2">
+                <i data-feather="navigation" class="w-6 h-6 md:w-8 md:h-8"></i>
+                <h1 class="text-lg md:text-xl font-bold">Fire Response Navigation</h1>
+            </div>
+            <div class="flex items-center space-x-2 md:space-x-4">
+                <nav class="flex space-x-4">
+                    <a href="dashboard.html" class="nav-btn">
+                        <i data-feather="map" class="w-4 h-4 inline mr-1"></i> Dashboard
+                    </a>
+                    <a href="incidents-history.html" class="nav-btn active">
+                        <i data-feather="list" class="w-4 h-4 inline mr-1"></i> History
+                    </a>
+                </nav>
+            </div>
+        </div>
+    </header>
+
+    <div class="container mx-auto px-4 py-8">
+        <div class="bg-white rounded-lg shadow-lg p-6">
+            <div class="flex items-center justify-between mb-6">
+                <h1 class="text-3xl font-bold text-gray-800">
+                    <i data-feather="file-text" class="w-8 h-8 inline-block mr-2"></i>
+                    Incidents History
+                </h1>
+            </div>
+
+            <div class="mb-4">
+                <input type="text" id="searchIncident" placeholder="Search incidents..." 
+                       class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500">
+            </div>
+
+            <div class="overflow-x-auto">
+                <table class="min-w-full bg-white border border-gray-200">
+                    <thead class="bg-gray-50">
+                        <tr>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">ID</th>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Date</th>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Location</th>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Fire Type</th>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Response Time</th>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="incidentsTableBody">
+                        <tr>
+                            <td colspan="6" class="px-4 py-8 text-center text-gray-500">
+                                <i data-feather="loader" class="w-8 h-8 inline-block animate-spin"></i>
+                                <p class="mt-2">Loading incidents...</p>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <div id="pagination" class="mt-6 flex justify-center space-x-2"></div>
+        </div>
+    </div>
+
+    <script>
+        let allIncidents = [];
+        let currentPage = 1;
+        const itemsPerPage = 20;
+
+        // Load incidents from backend
+        async function loadIncidents() {
+            try {
+                const response = await fetch('http://localhost:5000/api/incidents');
+                if (!response.ok) throw new Error('Failed to load incidents');
+                
+                const data = await response.json();
+                allIncidents = data.incidents || [];
+                displayIncidents();
+            } catch (error) {
+                console.error('Error loading incidents:', error);
+                document.getElementById('incidentsTableBody').innerHTML = `
+                    <tr>
+                        <td colspan="6" class="px-4 py-8 text-center text-red-500">
+                            <i data-feather="alert-circle" class="w-8 h-8 inline-block"></i>
+                            <p class="mt-2">Failed to load incidents. Make sure backend is running.</p>
+                        </td>
+                    </tr>
+                `;
+                feather.replace();
+            }
+        }
+
+        function displayIncidents() {
+            const tbody = document.getElementById('incidentsTableBody');
+            const start = (currentPage - 1) * itemsPerPage;
+            const end = start + itemsPerPage;
+            const paginatedIncidents = allIncidents.slice(start, end);
+
+            if (paginatedIncidents.length === 0) {
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="6" class="px-4 py-8 text-center text-gray-500">
+                            No incidents found
+                        </td>
+                    </tr>
+                `;
+                return;
+            }
+
+            tbody.innerHTML = paginatedIncidents.map(incident => {
+                // Parse date properly
+                let dateStr = 'N/A';
+                const dateValue = incident.date_of_incident || incident.time_received || incident.date;
+                if (dateValue) {
+                    try {
+                        const date = new Date(dateValue);
+                        if (!isNaN(date.getTime())) {
+                            dateStr = date.toLocaleDateString();
+                        }
+                    } catch (e) {
+                        dateStr = dateValue;
+                    }
+                }
+                return `
+                    <tr class="border-t hover:bg-gray-50">
+                        <td class="px-4 py-3 text-sm">${incident.id || 'N/A'}</td>
+                        <td class="px-4 py-3 text-sm">${dateStr}</td>
+                        <td class="px-4 py-3 text-sm">${incident.location || 'N/A'}</td>
+                        <td class="px-4 py-3 text-sm">
+                            <span class="px-2 py-1 bg-orange-100 text-orange-800 rounded-full text-xs">
+                                ${incident.fire_type || 'N/A'}
+                            </span>
+                        </td>
+                        <td class="px-4 py-3 text-sm">${incident.response_time || incident.response_time_min || 0} min</td>
+                        <td class="px-4 py-3 text-sm">
+                            <a href="feedback-detail.html?id=${incident.id}" 
+                               class="bg-blue-500 hover:bg-blue-600 text-white px-3 py-1 rounded text-xs">
+                                <i data-feather="eye" class="w-3 h-3 inline-block"></i>
+                                View Feedback
+                            </a>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+
+            feather.replace();
+            updatePagination();
+        }
+
+        function updatePagination() {
+            const totalPages = Math.ceil(allIncidents.length / itemsPerPage);
+            const pagination = document.getElementById('pagination');
+            
+            if (totalPages <= 1) {
+                pagination.innerHTML = '';
+                return;
+            }
+
+            let html = '';
+            
+            // Previous button
+            html += `
+                <button onclick="goToPage(${currentPage - 1})" 
+                        ${currentPage === 1 ? 'disabled' : ''}
+                        class="px-4 py-2 rounded ${currentPage === 1 ? 'bg-gray-200 text-gray-400 cursor-not-allowed' : 'bg-gray-200 hover:bg-gray-300'}">
+                    Previous
+                </button>
+            `;
+            
+            // Page numbers (show max 7 buttons)
+            let startPage = Math.max(1, currentPage - 3);
+            let endPage = Math.min(totalPages, currentPage + 3);
+            
+            // First page
+            if (startPage > 1) {
+                html += `<button onclick="goToPage(1)" class="px-4 py-2 rounded bg-gray-200 hover:bg-gray-300">1</button>`;
+                if (startPage > 2) {
+                    html += `<span class="px-2 py-2">...</span>`;
+                }
+            }
+            
+            // Middle pages
+            for (let i = startPage; i <= endPage; i++) {
+                html += `
+                    <button onclick="goToPage(${i})" 
+                            class="px-4 py-2 rounded ${i === currentPage ? 'bg-blue-500 text-white' : 'bg-gray-200 hover:bg-gray-300'}">
+                        ${i}
+                    </button>
+                `;
+            }
+            
+            // Last page
+            if (endPage < totalPages) {
+                if (endPage < totalPages - 1) {
+                    html += `<span class="px-2 py-2">...</span>`;
+                }
+                html += `<button onclick="goToPage(${totalPages})" class="px-4 py-2 rounded bg-gray-200 hover:bg-gray-300">${totalPages}</button>`;
+            }
+            
+            // Next button
+            html += `
+                <button onclick="goToPage(${currentPage + 1})" 
+                        ${currentPage === totalPages ? 'disabled' : ''}
+                        class="px-4 py-2 rounded ${currentPage === totalPages ? 'bg-gray-200 text-gray-400 cursor-not-allowed' : 'bg-gray-200 hover:bg-gray-300'}">
+                    Next
+                </button>
+            `;
+            
+            pagination.innerHTML = html;
+        }
+
+        function goToPage(page) {
+            const totalPages = Math.ceil(allIncidents.length / itemsPerPage);
+            if (page < 1 || page > totalPages) return;
+            currentPage = page;
+            displayIncidents();
+        }
+
+        // Search functionality
+        document.getElementById('searchIncident').addEventListener('input', (e) => {
+            const searchTerm = e.target.value.toLowerCase();
+            const filtered = allIncidents.filter(incident => 
+                JSON.stringify(incident).toLowerCase().includes(searchTerm)
+            );
+            
+            const tbody = document.getElementById('incidentsTableBody');
+            tbody.innerHTML = filtered.map(incident => {
+                // Parse date properly
+                let dateStr = 'N/A';
+                const dateValue = incident.date_of_incident || incident.time_received || incident.date;
+                if (dateValue) {
+                    try {
+                        const date = new Date(dateValue);
+                        if (!isNaN(date.getTime())) {
+                            dateStr = date.toLocaleDateString();
+                        }
+                    } catch (e) {
+                        dateStr = dateValue;
+                    }
+                }
+                return `
+                    <tr class="border-t hover:bg-gray-50">
+                        <td class="px-4 py-3 text-sm">${incident.id || 'N/A'}</td>
+                        <td class="px-4 py-3 text-sm">${dateStr}</td>
+                        <td class="px-4 py-3 text-sm">${incident.location || 'N/A'}</td>
+                        <td class="px-4 py-3 text-sm">
+                            <span class="px-2 py-1 bg-orange-100 text-orange-800 rounded-full text-xs">
+                                ${incident.fire_type || 'N/A'}
+                            </span>
+                        </td>
+                        <td class="px-4 py-3 text-sm">${incident.response_time || incident.response_time_min || 0} min</td>
+                        <td class="px-4 py-3 text-sm">
+                            <a href="feedback-detail.html?id=${incident.id}" 
+                               class="bg-blue-500 hover:bg-blue-600 text-white px-3 py-1 rounded text-xs">
+                                <i data-feather="eye" class="w-3 h-3 inline-block"></i>
+                                View Feedback
+                            </a>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+            feather.replace();
+        });
+
+        // Initialize
+        feather.replace();
+        loadIncidents();
+    </script>
+</body>
+</html>

@@ -1,0 +1,34 @@
+[
+  {
+    "id": 1,
+    "name": "Narrow Alley near Public Market",
+    "coordinates": [
+      [
+        14.2791,
+        121.416
+      ],
+      [
+        14.2795,
+        121.4165
+      ]
+    ],
+    "reason": "Road too narrow for fire trucks (2m width)",
+    "severity": "high"
+  },
+  {
+    "id": 2,
+    "name": "Flooded Road during Rainy Season - Barangay 1",
+    "coordinates": [
+      [
+        14.28,
+        121.417
+      ],
+      [
+        14.281,
+        121.418
+      ]
+    ],
+    "reason": "Frequently flooded, impassable during heavy rain",
+    "severity": "medium"
+  }
+]

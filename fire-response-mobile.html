@@ -1,0 +1,2594 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fire Response Navigation - Mobile</title>
+    <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://unpkg.com/aos@2.3.1/dist/aos.css" rel="stylesheet">
+    <script src="https://unpkg.com/aos@2.3.1/dist/aos.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/feather-icons/dist/feather.min.js"></script>
+    <script src="https://unpkg.com/feather-icons"></script>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://unpkg.com/leaflet-routing-machine@3.2.12/dist/leaflet-routing-machine.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.15.0/dist/tf.min.js"></script>
+    <style>
+        /* Mobile-optimized styles - defaults for small screens */
+        #map { 
+            height: 50vh;
+            width: 100%;
+            z-index: 1;
+        }
+        /* Remove desktop height adjustment */
+        .weather-card {
+            background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
+        }
+        .route-info {
+            background: linear-gradient(135deg, #fef2f2 0%, #fee2e2 100%);
+        }
+        .fire-theme {
+            background-color: #b91c1c;
+            color: white;
+        }
+        .loading-spinner {
+            border: 4px solid #f3f4f6;
+            border-top: 4px solid #b91c1c;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .location-status {
+            padding: 8px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: bold;
+        }
+        .location-active {
+            background-color: #10b981;
+            color: white;
+        }
+        .location-inactive {
+            background-color: #ef4444;
+            color: white;
+        }
+        .mobile-controls {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: white;
+            padding: 10px;
+            box-shadow: 0 -2px 10px rgba(0,0,0,0.1);
+            z-index: 1000;
+            display: flex;
+            justify-content: space-around;
+        }
+        /* Always show mobile controls in mobile version */
+        .mobile-control-btn {
+            flex: 1;
+            margin: 0 5px;
+            padding: 12px;
+            border-radius: 8px;
+            font-size: 14px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+        .mobile-menu-btn {
+            display: block;
+            padding: 10px;
+            background: #b91c1c;
+            color: white;
+            border-radius: 8px;
+            text-align: center;
+            margin-bottom: 10px;
+        }
+        /* Always show mobile menu btn */
+        .sidebar {
+            transition: all 0.3s ease;
+            /* Default to mobile sidebar behavior */
+            position: fixed;
+            top: 0;
+            right: -100%;
+            width: 80%;
+            height: 100%;
+            background: white;
+            z-index: 2000;
+            overflow-y: auto;
+            padding: 20px;
+            box-shadow: -2px 0 10px rgba(0,0,0,0.1);
+        }
+        .sidebar.active {
+            right: 0;
+        }
+        .overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.5);
+            z-index: 1500;
+        }
+        .overlay.active {
+            display: block;
+        }
+        .nearest-hydrant-info {
+            background: #dbeafe;
+            border-left: 4px solid #3b82f6;
+            padding: 12px;
+            border-radius: 8px;
+            margin-top: 12px;
+        }
+        .nearest-hydrant-info.warning {
+            background: #fef3c7;
+            border-left: 4px solid #f59e0b;
+        }
+        /* Enhanced Search Bar Styles - touch friendly */
+        .search-container {
+            position: relative;
+            margin-bottom: 0;
+        }
+        .search-input-container {
+            display: flex;
+            align-items: center;
+            border: 1px solid #d1d5db;
+            border-radius: 8px;
+            overflow: hidden;
+            background: white;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+        .search-input {
+            flex: 1;
+            padding: 12px 15px;
+            border: none;
+            font-size: 16px; /* Larger for mobile */
+            outline: none;
+        }
+        .search-icon {
+            padding: 0 12px;
+            color: #6b7280;
+        }
+        .search-input:focus {
+            outline: none;
+        }
+        .search-input-container:focus-within {
+            border-color: #b91c1c;
+            box-shadow: 0 0 0 3px rgba(185, 28, 28, 0.1);
+        }
+        .search-results {
+            position: absolute;
+            top: 100%;
+            left: 0;
+            right: 0;
+            background: white;
+            border: 1px solid #d1d5db;
+            border-radius: 8px;
+            max-height: 300px;
+            overflow-y: auto;
+            z-index: 1000;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            display: none;
+        }
+        .search-result-item {
+            padding: 12px 15px;
+            border-bottom: 1px solid #f3f4f6;
+            cursor: pointer;
+            font-size: 16px; /* Larger text */
+            display: flex;
+            align-items: center;
+            min-height: 44px; /* Touch target size */
+        }
+        .search-result-item:hover {
+            background-color: #f9fafb;
+        }
+        .search-result-item:last-child {
+            border-bottom: none;
+        }
+        .search-result-icon {
+            margin-right: 10px;
+            color: #6b7280;
+            width: 16px;
+            height: 16px;
+        }
+        .search-result-content {
+            flex: 1;
+        }
+        .search-result-name {
+            font-weight: 500;
+            margin-bottom: 2px;
+        }
+        .search-result-details {
+            font-size: 12px;
+            color: #6b7280;
+        }
+        .search-loading {
+            padding: 12px 15px;
+            text-align: center;
+            color: #6b7280;
+            font-style: italic;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .search-loading-icon {
+            margin-right: 8px;
+            animation: spin 1s linear infinite;
+        }
+        .search-clear {
+            padding: 0 12px;
+            color: #6b7280;
+            cursor: pointer;
+            display: none;
+        }
+        .search-clear:hover {
+            color: #374151;
+        }
+        /* Map Search Container - Mobile stacked */
+        .map-search-container {
+            position: relative;
+            padding: 15px;
+            background: #f9fafb;
+            border-bottom: 1px solid #e5e7eb;
+            flex-direction: column;
+            gap: 10px;
+        }
+        .map-header-content {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            width: 100%;
+            flex-direction: column;
+            align-items: stretch;
+            gap: 10px;
+        }
+        .map-title {
+            font-size: 18px;
+            font-weight: 600;
+            color: #1f2937;
+            white-space: nowrap;
+        }
+        .search-wrapper {
+            flex: 1;
+            max-width: none;
+            margin-left: 0;
+        }
+        .map-controls {
+            display: flex;
+            gap: 10px;
+            margin-left: 0;
+            justify-content: center;
+        }
+        /* Location detection modal - touch friendly */
+        .location-modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 3000;
+        }
+        .location-modal-content {
+            background: white;
+            border-radius: 12px;
+            padding: 24px;
+            max-width: 400px;
+            width: 90%;
+            text-align: center;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
+        }
+        .location-modal-icon {
+            width: 64px;
+            height: 64px;
+            margin: 0 auto 16px;
+            background: #dbeafe;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .location-modal h3 {
+            font-size: 20px;
+            font-weight: bold;
+            margin-bottom: 12px;
+            color: #1f2937;
+        }
+        .location-modal p {
+            color: #6b7280;
+            margin-bottom: 20px;
+            line-height: 1.5;
+        }
+        .location-modal-buttons {
+            display: flex;
+            gap: 12px;
+            justify-content: center;
+        }
+        .location-modal-btn {
+            padding: 10px 20px;
+            border-radius: 8px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+            min-height: 44px; /* Touch target */
+            flex: 1;
+            max-width: 150px;
+        }
+        .location-modal-btn.primary {
+            background: #3b82f6;
+            color: white;
+            border: none;
+        }
+        .location-modal-btn.primary:hover {
+            background: #2563eb;
+        }
+        .location-modal-btn.secondary {
+            background: #f3f4f6;
+            color: #374151;
+            border: 1px solid #d1d5db;
+        }
+        .location-modal-btn.secondary:hover {
+            background: #e5e7eb;
+        }
+        .location-detecting {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+        .location-detecting-spinner {
+            width: 40px;
+            height: 40px;
+            border: 4px solid #e5e7eb;
+            border-top: 4px solid #3b82f6;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-bottom: 16px;
+        }
+        /* Custom hydrant marker styles */
+        .hydrant-marker {
+            background: none !important;
+            border: none !important;
+        }
+        .hydrant-icon {
+            width: 24px;
+            height: 24px;
+            filter: drop-shadow(0 0 2px rgba(0,0,0,0.7));
+        }
+        .hydrant-icon.operational {
+            filter: drop-shadow(0 0 2px rgba(0,0,0,0.7)) hue-rotate(120deg);
+        }
+        .hydrant-icon.unserviceable {
+            filter: drop-shadow(0 0 2px rgba(0,0,0,0.7)) hue-rotate(0deg) saturate(0.5) brightness(0.7);
+        }
+        .hydrant-icon.nearest {
+            width: 32px;
+            height: 32px;
+            filter: drop-shadow(0 0 3px rgba(0,0,0,0.9)) hue-rotate(240deg);
+        }
+        /* Alternative Routes Styles - compact for mobile */
+        .route-option {
+            border: 2px solid #e5e7eb;
+            border-radius: 8px;
+            padding: 12px;
+            margin-bottom: 10px;
+            cursor: pointer;
+            transition: all 0.2s;
+            min-height: 44px;
+        }
+        .route-option:hover {
+            border-color: #3b82f6;
+            background-color: #f8fafc;
+        }
+        .route-option.active {
+            border-color: #10b981;
+            background-color: #f0fdf4;
+        }
+        .route-option.fastest {
+            border-color: #10b981;
+            background-color: #f0fdf4;
+        }
+        .fastest-badge {
+            background-color: #10b981;
+            color: white;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 10px;
+            font-weight: bold;
+            margin-left: 8px;
+        }
+        .route-details {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .route-stats {
+            display: flex;
+            gap: 15px;
+        }
+        .route-stat {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        .route-stat-value {
+            font-weight: bold;
+            font-size: 14px;
+        }
+        .route-stat-label {
+            font-size: 10px;
+            color: #6b7280;
+        }
+        /* Hydrant Legend Styles - compact */
+        .hydrant-legend {
+            background: white;
+            padding: 10px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+            font-size: 12px;
+        }
+
+        /* Incident Feedback System Styles - compact */
+        .feedback-card {
+            background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
+            border-left: 4px solid #0ea5e9;
+        }
+        .training-status {
+            padding: 8px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: bold;
+            display: inline-block;
+        }
+        .status-training { background-color: #fef3c7; color: #d97706; }
+        .status-ready { background-color: #d1fae5; color: #065f46; }
+        .status-error { background-color: #fee2e2; color: #dc2626; }
+        .incident-item {
+            border-left: 4px solid #0ea5e9;
+            background: #f8fafc;
+            margin: 8px 0;
+            padding: 12px;
+            border-radius: 8px;
+        }
+        .incident-item.recent {
+            border-left-color: #10b981;
+            background: #f0fdf4;
+        }
+        .model-metrics {
+            background: white;
+            padding: 12px;
+            border-radius: 8px;
+            margin-top: 12px;
+        }
+        .metric-bar {
+            height: 6px;
+            background: #e5e7eb;
+            border-radius: 3px;
+            margin: 4px 0;
+            overflow: hidden;
+        }
+        .metric-fill {
+            height: 100%;
+            background: #0ea5e9;
+            transition: width 0.5s ease;
+        }
+
+        /* Mobile-specific adjustments */
+        header {
+            padding: 1rem 1rem; /* Smaller padding */
+        }
+        main {
+            padding: 1rem; /* px-2 py-4 */
+        }
+        .p-4 { padding: 1rem; }
+        .p-6 { padding: 1.5rem; } /* Adjust as needed */
+        button {
+            min-height: 44px; /* Standard touch target */
+        }
+        select, input {
+            min-height: 44px;
+        }
+    </style>
+</head>
+<body class="bg-gray-100">
+    <!-- Location Detection Modal -->
+    <div id="locationModal" class="location-modal hidden">
+        <div class="location-modal-content">
+            <div id="locationRequestContent">
+                <div class="location-modal-icon">
+                    <i data-feather="map-pin" class="w-8 h-8 text-blue-500"></i>
+                </div>
+                <h3>Enable Location Services</h3>
+                <p>This application needs your location to provide accurate navigation. Your location data is only used for this session and is not stored.</p>
+                <div class="location-modal-buttons">
+                    <button id="allowLocation" class="location-modal-btn primary">Allow Location</button>
+                    <button id="denyLocation" class="location-modal-btn secondary">Skip for Now</button>
+                </div>
+            </div>
+            <div id="locationDetectingContent" class="location-detecting hidden">
+                <div class="location-detecting-spinner"></div>
+                <h3>Detecting Your Location</h3>
+                <p>Please wait while we determine your current position...</p>
+            </div>
+            <div id="locationErrorContent" class="hidden">
+                <div class="location-modal-icon">
+                    <i data-feather="alert-circle" class="w-8 h-8 text-red-500"></i>
+                </div>
+                <h3>Location Access Denied</h3>
+                <p id="locationErrorMsg">We couldn't access your location. You can still use the app by manually setting your location or searching for a destination.</p>
+                <div class="location-modal-buttons">
+                    <button id="closeLocationModal" class="location-modal-btn primary">Continue</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Mobile Menu Button -->
+    <div class="fixed top-4 right-4 z-10">
+        <button id="mobileMenuBtn" class="mobile-menu-btn">
+            <i data-feather="menu" class="w-5 h-5 mx-auto"></i>
+            Menu
+        </button>
+    </div>
+
+    <!-- Overlay for mobile sidebar -->
+    <div id="overlay" class="overlay"></div>
+
+    <header class="fire-theme shadow-lg sticky top-0 z-10">
+        <div class="container mx-auto px-4 py-3 flex justify-between items-center"> <!-- Adjusted py-3 -->
+            <div class="flex items-center space-x-2">
+                <i data-feather="navigation" class="w-6 h-6"></i>
+                <h1 class="text-lg font-bold">Fire Response Navigation</h1>
+            </div>
+            <div class="flex items-center space-x-2">
+                <div id="location-status" class="location-status location-inactive text-xs">Location Off</div>
+                <div id="current-time" class="text-sm"></div>
+            </div>
+        </div>
+    </header>
+
+    <main class="container mx-auto px-2 py-4"> <!-- Adjusted -->
+        <div class="grid grid-cols-1 gap-4"> <!-- Removed lg:grid-cols-3 md:gap-6 -->
+            <!-- Map Section - Full width on mobile -->
+            <div class="space-y-4"> <!-- Removed lg:col-span-2 -->
+                <!-- Map Search Bar -->
+                <div class="bg-white rounded-xl shadow-md overflow-hidden relative">
+                    <div class="map-search-container">
+                        <div class="map-header-content">
+                            <h3 class="map-title">Live Navigation Map</h3>
+                            <div class="search-wrapper">
+                                <div class="search-container">
+                                    <div class="search-input-container">
+                                        <div class="search-icon">
+                                            <i data-feather="search" class="w-4 h-4"></i>
+                                        </div>
+                                        <input type="text" id="mapSearchInput" class="search-input" placeholder="Search for a place or address in Santa Cruz, Laguna...">
+                                        <div id="mapSearchClear" class="search-clear">
+                                            <i data-feather="x" class="w-4 h-4"></i>
+                                        </div>
+                                    </div>
+                                    <div id="mapSearchResults" class="search-results"></div>
+                                </div>
+                            </div>
+                            <div class="map-controls">
+                                <button id="locateMe" class="px-3 py-2 bg-blue-500 text-white rounded-lg text-sm flex items-center space-x-1 min-h-[44px]">
+                                    <i data-feather="target" class="w-4 h-4"></i>
+                                    <span class="hidden sm:inline">Locate Me</span>
+                                </button>
+                                <button id="toggleTracking" class="px-3 py-2 bg-green-500 text-white rounded-lg text-sm flex items-center space-x-1 min-h-[44px]">
+                                    <i data-feather="map-pin" class="w-4 h-4"></i>
+                                    <span class="hidden sm:inline">Start Tracking</span>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div id="map" class="w-full"></div>
+                </div>
+                
+                <!-- Route Information -->
+                <div class="route-info rounded-xl shadow-md p-4 hidden" id="routeInfo">
+                    <h3 class="text-lg font-bold mb-3 text-red-800">Navigation Information</h3>
+                    
+                    <!-- Current Route Summary - Compact grid for mobile -->
+                    <div class="grid grid-cols-2 gap-2 mb-4">
+                        <div class="bg-white p-2 rounded-lg shadow-sm">
+                            <div class="flex items-center space-x-1">
+                                <i data-feather="clock" class="text-red-600 w-4 h-4"></i>
+                                <span class="font-semibold text-xs">ETA:</span>
+                            </div>
+                            <p class="text-sm mt-1" id="eta"></p>
+                        </div>
+                        <div class="bg-white p-2 rounded-lg shadow-sm">
+                            <div class="flex items-center space-x-1">
+                                <i data-feather="map-pin" class="text-red-600 w-4 h-4"></i>
+                                <span class="font-semibold text-xs">Distance:</span>
+                            </div>
+                            <p class="text-sm mt-1" id="distance"></p>
+                        </div>
+                        <div class="bg-white p-2 rounded-lg shadow-sm">
+                            <div class="flex items-center space-x-1">
+                                <i data-feather="navigation" class="text-red-600 w-4 h-4"></i>
+                                <span class="font-semibold text-xs">Speed:</span>
+                            </div>
+                            <p class="text-sm mt-1" id="speed">-- km/h</p>
+                        </div>
+                        <div class="bg-white p-2 rounded-lg shadow-sm">
+                            <div class="flex items-center space-x-1">
+                                <i data-feather="compass" class="text-red-600 w-4 h-4"></i>
+                                <span class="font-semibold text-xs">Heading:</span>
+                            </div>
+                            <p class="text-sm mt-1" id="heading">--°</p>
+                        </div>
+                    </div>
+                    
+                    <!-- Alternative Routes Section -->
+                    <div class="mt-4">
+                        <h4 class="font-bold text-md mb-3 text-gray-800">Alternative Routes</h4>
+                        <div id="alternativeRoutes" class="space-y-3">
+                            <!-- Alternative routes will be populated here -->
+                        </div>
+                    </div>
+                    
+                    <div class="mt-3 bg-white p-2 rounded-lg shadow-sm">
+                        <div class="flex items-center space-x-1 mb-1">
+                            <i data-feather="alert-circle" class="text-red-600 w-4 h-4"></i>
+                            <span class="font-semibold text-xs">Next Instruction:</span>
+                        </div>
+                        <p class="text-sm" id="instructions"></p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Sidebar Content - Always slide-in on mobile -->
+            <div class="sidebar space-y-4">
+                <button id="closeSidebar" class="absolute top-4 right-4 text-gray-500">
+                    <i data-feather="x" class="w-6 h-6"></i>
+                </button>
+                
+                <!-- Weather Card -->
+                <div class="weather-card rounded-xl shadow-md p-4">
+                    <div class="flex justify-between items-center mb-3">
+                        <h3 class="text-lg font-bold text-gray-800">Current Weather</h3>
+                        <i data-feather="cloud" class="w-5 h-5 text-blue-500"></i>
+                    </div>
+                    <div id="weather-info" class="space-y-2">
+                        <div class="flex justify-between">
+                            <span class="font-medium text-sm">Location:</span>
+                            <span id="weather-location" class="font-semibold text-sm">Santa Cruz, Laguna</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="font-medium text-sm">Temperature:</span>
+                            <span id="weather-temp" class="font-semibold text-sm">--°C</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="font-medium text-sm">Condition:</span>
+                            <span id="weather-condition" class="font-semibold text-sm">--</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="font-medium text-sm">Humidity:</span>
+                            <span id="weather-humidity" class="font-semibold text-sm">--%</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="font-medium text-sm">Wind:</span>
+                            <span id="weather-wind" class="font-semibold text-sm">-- km/h</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Incident Details -->
+                <div class="bg-white rounded-xl shadow-md p-4">
+                    <h3 class="text-lg font-bold mb-3 text-gray-800">Incident Details</h3>
+                    <div class="space-y-3">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Type of Occupancy</label>
+                            <select id="occupancyType" class="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500 text-sm min-h-[44px]">
+                                <option value="Residential">Residential</option>
+                                <option value="Business">Business</option>
+                                <option value="Industrial">Industrial</option>
+                                <option value="Educational">Educational</option>
+                                <option value="Mercantile">Mercantile</option>
+                                <option value="Storage">Storage</option>
+                                <option value="Grass">Grass/Forest</option>
+                                <option value="Other">Other</option>
+                            </select>
+                        </div>
+
+                        <div class="bg-yellow-50 p-2 rounded-lg">
+                            <div class="flex items-center space-x-1">
+                                <i data-feather="map-pin" class="w-3 h-3 text-yellow-600"></i>
+                                <span class="text-xs font-medium">Use the search bar on the map to set incident location</span>
+                            </div>
+                        </div>
+                        
+                        <button id="calculateRoute" class="w-full py-2 bg-red-600 hover:bg-red-700 text-white font-medium rounded-lg transition duration-200 flex items-center justify-center space-x-1 text-sm min-h-[44px]">
+                            <i data-feather="navigation" class="w-4 h-4"></i>
+                            <span>Start Navigation</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Nearest Hydrant Information -->
+                <div id="nearestHydrantCard" class="nearest-hydrant-info rounded-xl shadow-md p-4 hidden">
+                    <div class="flex justify-between items-center mb-3">
+                        <h3 class="text-lg font-bold text-blue-800">Nearest Fire Hydrant</h3>
+                        <i data-feather="droplet" class="w-5 h-5 text-blue-500"></i>
+                    </div>
+                    <div id="nearest-hydrant-content" class="space-y-2">
+                        <div class="flex justify-between">
+                            <span class="font-medium text-sm">Distance:</span>
+                            <span id="hydrant-distance" class="font-semibold text-sm">--</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="font-medium text-sm">Condition:</span>
+                            <span id="hydrant-condition" class="font-semibold text-sm">--</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="font-medium text-sm">Pressure:</span>
+                            <span id="hydrant-pressure" class="font-semibold text-sm">--</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="font-medium text-sm">Coordinates:</span>
+                            <span id="hydrant-coords" class="font-semibold text-sm">--</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Fire Hydrant Legend Card -->
+                <div class="bg-white rounded-xl shadow-md p-4">
+                    <h3 class="text-lg font-bold mb-3 text-gray-800">Fire Hydrant Legend</h3>
+                    <div class="space-y-3">
+                        <div class="flex items-center">
+                            <svg class="hydrant-icon operational" width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="margin-right: 10px;">
+                                <path d="M12 2C8.13 2 5 5.13 5 9C5 14.25 12 22 12 22C12 22 19 14.25 19 9C19 5.13 15.87 2 12 2Z" fill="#3B82F6"/>
+                                <path d="M12 6C10.34 6 9 7.34 9 9C9 10.66 10.34 12 12 12C13.66 12 15 10.66 15 9C15 7.34 13.66 6 12 6Z" fill="white"/>
+                                <path d="M12 2V6" stroke="white" stroke-width="2"/>
+                                <path d="M9 9H15" stroke="white" stroke-width="2"/>
+                            </svg>
+                            <span class="text-sm">Operational Hydrant</span>
+                        </div>
+                        <div class="flex items-center">
+                            <svg class="hydrant-icon unserviceable" width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="margin-right: 10px;">
+                                <path d="M12 2C8.13 2 5 5.13 5 9C5 14.25 12 22 12 22C12 22 19 14.25 19 9C19 5.13 15.87 2 12 2Z" fill="#3B82F6"/>
+                                <path d="M12 6C10.34 6 9 7.34 9 9C9 10.66 10.34 12 12 12C13.66 12 15 10.66 15 9C15 7.34 13.66 6 12 6Z" fill="white"/>
+                                <path d="M12 2V6" stroke="white" stroke-width="2"/>
+                                <path d="M9 9H15" stroke="white" stroke-width="2"/>
+                            </svg>
+                            <span class="text-sm">Unserviceable Hydrant</span>
+                        </div>
+                        <div class="flex items-center">
+                            <svg class="hydrant-icon nearest" width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="margin-right: 10px;">
+                                <path d="M12 2C8.13 2 5 5.13 5 9C5 14.25 12 22 12 22C12 22 19 14.25 19 9C19 5.13 15.87 2 12 2Z" fill="#3B82F6"/>
+                                <path d="M12 6C10.34 6 9 7.34 9 9C9 10.66 10.34 12 12 12C13.66 12 15 10.66 15 9C15 7.34 13.66 6 12 6Z" fill="white"/>
+                                <path d="M12 2V6" stroke="white" stroke-width="2"/>
+                                <path d="M9 9H15" stroke="white" stroke-width="2"/>
+                            </svg>
+                            <span class="text-sm">Nearest Hydrant (≤50ft)</span>
+                        </div>
+                        <div class="border-t pt-2 mt-2">
+                            <p class="text-xs text-gray-600">Only hydrants within 50 feet are highlighted with special markers and connection lines.</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Emergency Contacts -->
+                <div class="bg-white rounded-xl shadow-md p-4">
+                    <h3 class="text-lg font-bold mb-3 text-gray-800">Emergency Contacts</h3>
+                    <div class="space-y-2">
+                        <div class="flex items-center space-x-2 p-2 bg-red-50 rounded-lg">
+                            <div class="p-1 bg-red-100 rounded-full">
+                                <i data-feather="phone" class="w-4 h-4 text-red-600"></i>
+                            </div>
+                            <div>
+                                <p class="font-medium text-sm">BFP Emergency</p>
+                                <p class="text-xs text-gray-600">(049) 808-1234</p>
+                            </div>
+                        </div>
+                        <div class="flex items-center space-x-2 p-2 bg-blue-50 rounded-lg">
+                            <div class="p-1 bg-blue-100 rounded-full">
+                                <i data-feather="phone" class="w-4 h-4 text-blue-600"></i>
+                            </div>
+                            <div>
+                                <p class="font-medium text-sm">Police Station</p>
+                                <p class="text-xs text-gray-600">(049) 808-5678</p>
+                            </div>
+                        </div>
+                        <div class="flex items-center space-x-2 p-2 bg-green-50 rounded-lg">
+                            <div class="p-1 bg-green-100 rounded-full">
+                                <i data-feather="phone" class="w-4 h-4 text-green-600"></i>
+                            </div>
+                            <div>
+                                <p class="font-medium text-sm">Hospital</p>
+                                <p class="text-xs text-gray-600">(049) 808-9012</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Incident Learning System -->
+                <div class="feedback-card rounded-xl shadow-md p-4">
+                    <div class="flex justify-between items-center mb-3">
+                        <h3 class="text-lg font-bold text-blue-800">Incident Learning System</h3>
+                        <i data-feather="database" class="w-5 h-5 text-blue-500"></i>
+                    </div>
+                    
+                    <!-- Model Status -->
+                    <div class="mb-4">
+                        <div class="flex justify-between items-center mb-2">
+                            <span class="font-medium">Model Status:</span>
+                            <span id="modelStatus" class="training-status status-ready">Ready</span>
+                        </div>
+                        <div class="model-metrics">
+                            <div class="flex justify-between text-xs mb-1">
+                                <span>Training Data:</span>
+                                <span id="trainingCount">0 incidents</span>
+                            </div>
+                            <div class="metric-bar">
+                                <div id="trainingProgress" class="metric-fill" style="width: 0%"></div>
+                            </div>
+                            
+                            <div class="flex justify-between text-xs mb-1 mt-3">
+                                <span>Model Accuracy:</span>
+                                <span id="modelAccuracy">--%</span>
+                            </div>
+                            <div class="metric-bar">
+                                <div id="accuracyBar" class="metric-fill" style="width: 0%"></div>
+                            </div>
+                            
+                            <div class="flex justify-between text-xs mb-1 mt-3">
+                                <span>Last Retrained:</span>
+                                <span id="lastRetrained">Never</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Recent Incidents -->
+                    <div class="mb-4">
+                        <h4 class="font-semibold text-sm mb-2">Recent Incidents Added</h4>
+                        <div id="recentIncidents" class="max-h-32 overflow-y-auto space-y-2">
+                            <div class="text-center py-2 text-gray-500 text-sm">
+                                No incidents recorded yet
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Add New Incident Form -->
+                    <div class="bg-white p-3 rounded-lg border">
+                        <h4 class="font-semibold text-sm mb-2">Report New Fire Incident</h4>
+                        <div class="space-y-2">
+                            <select id="incidentSeverity" class="w-full p-2 border border-gray-300 rounded text-sm min-h-[44px]">
+                                <option value="">Select Severity</option>
+                                <option value="minor">Minor (Small fire)</option>
+                                <option value="moderate">Moderate (Structure involved)</option>
+                                <option value="major">Major (Multiple structures)</option>
+                                <option value="severe">Severe (Injuries/fatalities)</option>
+                            </select>
+                            
+                            <select id="incidentType" class="w-full p-2 border border-gray-300 rounded text-sm min-h-[44px]">
+                                <option value="">Select Incident Type</option>
+                                <option value="Residential">Residential</option>
+                                <option value="Commercial">Commercial</option>
+                                <option value="Industrial">Industrial</option>
+                                <option value="Vehicle">Vehicle</option>
+                                <option value="Wildfire">Wildfire</option>
+                                <option value="Other">Other</option>
+                            </select>
+                            
+                            <div class="flex space-x-2">
+                                <button id="quickReportBtn" class="flex-1 bg-blue-500 text-white py-2 rounded text-sm hover:bg-blue-600 transition min-h-[44px]">
+                                    Quick Report
+                                </button>
+                                <button id="detailedReportBtn" class="flex-1 bg-green-500 text-white py-2 rounded text-sm hover:bg-green-600 transition min-h-[44px]">
+                                    Detailed Report
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Mobile Controls - Always visible -->
+    <div class="mobile-controls">
+        <button id="mobileLocate" class="mobile-control-btn bg-blue-500 text-white">
+            <i data-feather="target" class="w-5 h-5 mb-1"></i>
+            <span class="text-xs">Locate</span>
+        </button>
+        <button id="mobileTrack" class="mobile-control-btn bg-green-500 text-white">
+            <i data-feather="map-pin" class="w-5 h-5 mb-1"></i>
+            <span class="text-xs">Track</span>
+        </button>
+        <button id="mobileNavigate" class="mobile-control-btn bg-red-600 text-white">
+            <i data-feather="navigation" class="w-5 h-5 mb-1"></i>
+            <span class="text-xs">Navigate</span>
+        </button>
+        <button id="mobileMenu" class="mobile-control-btn bg-gray-600 text-white">
+            <i data-feather="menu" class="w-5 h-5 mb-1"></i>
+            <span class="text-xs">Menu</span>
+        </button>
+    </div>
+
+    <script>
+        // =============================================
+        // ENHANCED FIRE INCIDENT LEARNING SYSTEM
+        // =============================================
+
+        class RealFireIncidentLearner {
+            constructor() {
+                this.model = null;
+                this.isTraining = false;
+                this.trainingData = [];
+                this.modelAccuracy = 0;
+                this.backendUrl = 'http://localhost:5000/api'; // Change to your backend URL
+                
+                // Load existing data on initialization
+                this.loadIncidents();
+            }
+
+            // Load incidents from backend or local storage
+            async loadIncidents() {
+                try {
+                    // Try to get from backend first
+                    const response = await fetch(`${this.backendUrl}/incidents`);
+                    if (response.ok) {
+                        const result = await response.json();
+                        this.trainingData = result.incidents || [];
+                    } else {
+                        // Fallback to local storage
+                        this.trainingData = JSON.parse(localStorage.getItem('fireIncidents') || '[]');
+                    }
+                } catch (error) {
+                    console.error('Load incidents error:', error);
+                    this.trainingData = JSON.parse(localStorage.getItem('fireIncidents') || '[]');
+                }
+
+                this.updateUI();
+                return this.trainingData;
+            }
+
+            // Train model with real ML
+            async trainModel(incidents) {
+                if (incidents.length < 5) {
+                    this.showNotification(`Need at least 5 incidents. Currently have ${incidents.length}`, true);
+                    return false;
+                }
+
+                this.isTraining = true;
+                this.updateUI();
+
+                try {
+                    const response = await fetch(`${this.backendUrl}/train`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({ incidents: incidents })
+                    });
+
+                    const result = await response.json();
+
+                    if (!response.ok) {
+                        throw new Error(result.error || 'Training failed');
+                    }
+
+                    this.modelAccuracy = result.accuracy;
+                    this.showNotification(`Model trained successfully! Accuracy: ${(result.accuracy * 100).toFixed(1)}%`);
+                    
+                    return true;
+
+                } catch (error) {
+                    console.error('Training error:', error);
+                    this.showNotification(`Training failed: ${error.message}`, true);
+                    return false;
+                } finally {
+                    this.isTraining = false;
+                    this.updateUI();
+                }
+            }
+
+            // Get combined prediction and historical feedback
+            async getFeedback(incidentData) {
+                try {
+                    // Add weather data to incident for prediction
+                    const feedbackData = {
+                        ...incidentData,
+                        temperature: currentWeatherData?.temperature || 25,
+                        humidity: currentWeatherData?.humidity || 70,
+                        wind_speed: currentWeatherData?.windSpeed || 10
+                    };
+
+                    const response = await fetch(`${this.backendUrl}/feedback`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify(feedbackData)
+                    });
+
+                    const result = await response.json();
+
+                    if (!response.ok) {
+                        throw new Error(result.error || 'Feedback failed');
+                    }
+
+                    return result;
+
+                } catch (error) {
+                    console.error('Feedback error:', error);
+                    return { error: error.message };
+                }
+            }
+
+            // Store incident in backend
+            async storeIncident(incidentData) {
+                try {
+                    const response = await fetch(`${this.backendUrl}/incidents`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify(incidentData)
+                    });
+
+                    const result = await response.json();
+
+                    if (!response.ok) {
+                        throw new Error(result.error || 'Failed to store incident');
+                    }
+
+                    // Add to local training data
+                    incidentData.id = result.id;
+                    incidentData.timestamp = result.timestamp;
+                    this.trainingData.push(incidentData);
+                    
+                    this.updateUI();
+                    return result;
+
+                } catch (error) {
+                    console.error('Storage error:', error);
+                    // Fallback to local storage if backend is unavailable
+                    return this.storeIncidentLocally(incidentData);
+                }
+            }
+
+            // Fallback local storage
+            storeIncidentLocally(incidentData) {
+                const incidents = JSON.parse(localStorage.getItem('fireIncidents') || '[]');
+                incidentData.id = Date.now();
+                incidentData.timestamp = new Date().toISOString();
+                incidents.push(incidentData);
+                localStorage.setItem('fireIncidents', JSON.stringify(incidents));
+                
+                // Update local training data
+                this.trainingData = incidents;
+                this.updateUI();
+                
+                return { 
+                    message: 'Incident stored locally', 
+                    id: incidentData.id,
+                    local: true 
+                };
+            }
+
+            // Update UI with real metrics
+            updateUI() {
+                // Update training count
+                const trainingCountElement = document.getElementById('trainingCount');
+                if (trainingCountElement) {
+                    trainingCountElement.textContent = `${this.trainingData.length} incidents`;
+                }
+                
+                // Update progress bar (cap at 100 incidents for visualization)
+                const progress = Math.min((this.trainingData.length / 100) * 100, 100);
+                const trainingProgressElement = document.getElementById('trainingProgress');
+                if (trainingProgressElement) {
+                    trainingProgressElement.style.width = `${progress}%`;
+                }
+                
+                // Update model accuracy
+                const modelAccuracyElement = document.getElementById('modelAccuracy');
+                if (modelAccuracyElement) {
+                    modelAccuracyElement.textContent = `${(this.modelAccuracy * 100).toFixed(1)}%`;
+                }
+                
+                const accuracyBarElement = document.getElementById('accuracyBar');
+                if (accuracyBarElement) {
+                    accuracyBarElement.style.width = `${this.modelAccuracy * 100}%`;
+                }
+                
+                // Update last retrained
+                const lastRetrainedElement = document.getElementById('lastRetrained');
+                if (lastRetrainedElement) {
+                    lastRetrainedElement.textContent = new Date().toLocaleString();
+                }
+                
+                // Update model status
+                const statusElement = document.getElementById('modelStatus');
+                if (statusElement) {
+                    if (this.isTraining) {
+                        statusElement.textContent = 'Training...';
+                        statusElement.className = 'training-status status-training';
+                    } else if (this.modelAccuracy > 0) {
+                        statusElement.textContent = 'Ready';
+                        statusElement.className = 'training-status status-ready';
+                    } else {
+                        statusElement.textContent = 'Needs Training';
+                        statusElement.className = 'training-status status-error';
+                    }
+                }
+
+                // Update recent incidents
+                this.updateRecentIncidents();
+            }
+
+            // Update recent incidents display
+            updateRecentIncidents() {
+                const container = document.getElementById('recentIncidents');
+                if (!container) return;
+                
+                // Get last 5 incidents
+                const recentIncidents = [...this.trainingData]
+                    .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
+                    .slice(0, 5);
+
+                if (recentIncidents.length === 0) {
+                    container.innerHTML = `
+                        <div class="text-center py-2 text-gray-500 text-sm">
+                            No incidents recorded yet
+                        </div>
+                    `;
+                    return;
+                }
+
+                container.innerHTML = recentIncidents.map(incident => `
+                    <div class="incident-item recent">
+                        <div class="flex justify-between items-start">
+                            <span class="font-medium text-xs">${incident.type}</span>
+                            <span class="text-xs text-gray-500">${this.formatTime(incident.timestamp)}</span>
+                        </div>
+                        <div class="text-xs text-gray-600">Severity: ${incident.severity}</div>
+                    </div>
+                `).join('');
+            }
+
+            // Format timestamp for display
+            formatTime(timestamp) {
+                const date = new Date(timestamp);
+                const now = new Date();
+                const diffMs = now - date;
+                const diffMins = Math.floor(diffMs / 60000);
+                const diffHours = Math.floor(diffMs / 3600000);
+
+                if (diffMins < 1) return 'Just now';
+                if (diffMins < 60) return `${diffMins}m ago`;
+                if (diffHours < 24) return `${diffHours}h ago`;
+                return date.toLocaleDateString();
+            }
+
+            // Show training notification
+            showNotification(message, isError = false) {
+                // Create notification element
+                const notification = document.createElement('div');
+                notification.className = `fixed top-4 right-4 p-4 rounded-lg shadow-lg text-white z-50 transform transition-transform duration-300 ${
+                    isError ? 'bg-red-500' : 'bg-green-500'
+                }`;
+                notification.innerHTML = `
+                    <div class="flex items-center">
+                        <i data-feather="${isError ? 'alert-triangle' : 'check-circle'}" class="w-5 h-5 mr-2"></i>
+                        <span>${message}</span>
+                    </div>
+                `;
+                
+                document.body.appendChild(notification);
+                feather.replace();
+
+                // Remove after 4 seconds
+                setTimeout(() => {
+                    notification.style.transform = 'translateX(100%)';
+                    setTimeout(() => {
+                        if (notification.parentNode) {
+                            notification.parentNode.removeChild(notification);
+                        }
+                    }, 300);
+                }, 4000);
+            }
+
+            // Get training statistics
+            getStatistics() {
+                const stats = {
+                    totalIncidents: this.trainingData.length,
+                    bySeverity: {},
+                    byType: {},
+                    accuracy: this.modelAccuracy,
+                    lastTraining: new Date().toLocaleString()
+                };
+
+                this.trainingData.forEach(incident => {
+                    stats.bySeverity[incident.severity] = (stats.bySeverity[incident.severity] || 0) + 1;
+                    stats.byType[incident.type] = (stats.byType[incident.type] || 0) + 1;
+                });
+
+                return stats;
+            }
+        }
+
+        // =============================================
+        // MAP AND NAVIGATION SYSTEM
+        // =============================================
+
+        // Map and navigation variables
+        let map;
+        let currentLocationMarker;
+        let destinationMarker;
+        let routingControl;
+        let watchId;
+        let isTracking = false;
+        let currentWeatherData = null;
+        let destinationLatLng = null;
+        
+        // Current position tracking
+        let currentPosition = null;
+        let previousPosition = null;
+        let currentSpeed = 0;
+        let currentHeading = 0;
+
+        // Hydrant variables
+        let nearestHydrantMarker = null;
+        let hydrantLine = null;
+
+        // Search variables
+        let searchTimeout = null;
+
+        // Route variables
+        let currentRouteIndex = 0;
+        let alternativeRoutes = [];
+        let routeLayers = [];
+
+        // Enhanced Incident Learning System with Real ML
+        const incidentLearner = new RealFireIncidentLearner();
+
+        // Define bounding box for Santa Cruz, Laguna area
+        const SANTA_CRUZ_BOUNDS = {
+            southWest: [14.20, 121.35],  // Southwest corner (lat, lng)
+            northEast: [14.32, 121.45]   // Northeast corner (lat, lng)
+        };
+
+        // Fire hydrant data from the CSV
+        const fireHydrants = [
+            {Latitude: 14.280248, Longitude: 121.394529, "Present Condition": "Operational", Remarks: "Low Pressure"},
+            {Latitude: 14.280069, Longitude: 121.394703, "Present Condition": "Operational", Remarks: "High Pressure"},
+            {Latitude: 14.273128, Longitude: 121.400478, "Present Condition": "Operational", Remarks: "High Pressure"},
+            {Latitude: 14.271956, Longitude: 121.399617, "Present Condition": "Operational", Remarks: "High Pressure"},
+            {Latitude: 14.271853, Longitude: 121.399576, "Present Condition": "Operational", Remarks: "High Pressure"},
+            {Latitude: 14.26305, Longitude: 121.40111, "Present Condition": "Operational", Remarks: "High Pressure"},
+            {Latitude: 14.27774, Longitude: 121.411473, "Present Condition": "Operational", Remarks: "Low Pressure"},
+            {Latitude: 14.253727, Longitude: 121.380829, "Present Condition": "Operational", Remarks: "High Pressure"},
+            {Latitude: 14.248357, Longitude: 121.378854, "Present Condition": "Operational", Remarks: "High Pressure"},
+            {Latitude: 14.244188, Longitude: 121.403141, "Present Condition": "Operational", Remarks: "High Pressure"},
+            {Latitude: 14.272753, Longitude: 121.421359, "Present Condition": "Operational", Remarks: "High Pressure"},
+            {Latitude: 14.250796, Longitude: 121.415993, "Present Condition": "Operational", Remarks: "Low Pressure"},
+            {Latitude: 14.278958, Longitude: 121.415888, "Present Condition": "Operational", Remarks: "High Pressure"},
+            {Latitude: 14.286795, Longitude: 121.411203, "Present Condition": "Operational", Remarks: "Low Pressure"},
+            {Latitude: 14.287409, Longitude: 121.411705, "Present Condition": "Operational", Remarks: "Low Pressure"},
+            {Latitude: 14.277512, Longitude: 121.419285, "Present Condition": "Unserviceable", Remarks: "Unserviceable"},
+            {Latitude: 14.275834, Longitude: 121.419642, "Present Condition": "Operational", Remarks: "High Pressure"},
+            {Latitude: 14.279892, Longitude: 121.415254, "Present Condition": "Operational", Remarks: "Low pressure"},
+            {Latitude: 14.281046, Longitude: 121.416473, "Present Condition": "Operational", Remarks: "Low pressure"},
+            {Latitude: 14.281227, Longitude: 121.416456, "Present Condition": "Operational", Remarks: "High Pressure"},
+            {Latitude: 14.281045, Longitude: 121.416963, "Present Condition": "Operational", Remarks: "Low pressure"},
+            {Latitude: 14.28098, Longitude: 121.416969, "Present Condition": "Operational", Remarks: "Low pressure"},
+            {Latitude: 14.280987, Longitude: 121.416969, "Present Condition": "Operational", Remarks: "Low pressure"},
+            {Latitude: 14.285525, Longitude: 121.414276, "Present Condition": "Operational", Remarks: "High Pressure"},
+            {Latitude: 14.285548, Longitude: 121.4143, "Present Condition": "Operational", Remarks: "Low pressure"},
+            {Latitude: 14.284434, Longitude: 121.414435, "Present Condition": "Unserviceable", Remarks: "Unserviceable"},
+            {Latitude: 14.285302, Longitude: 121.412797, "Present Condition": "Unserviceable", Remarks: "Unserviceable"},
+            {Latitude: 14.287687, Longitude: 121.411143, "Present Condition": "Unserviceable", Remarks: "Unserviceable"},
+            {Latitude: 14.293597, Longitude: 121.407939, "Present Condition": "Operational", Remarks: "High Pressure"},
+            {Latitude: 14.289195, Longitude: 121.413264, "Present Condition": "Unserviceable", Remarks: "Unserviceable"},
+            {Latitude: 14.281298, Longitude: 121.410662, "Present Condition": "Operational", Remarks: "Low pressure"}
+        ];
+
+        // Function to create custom hydrant icons
+        function createHydrantIcon(condition, isNearest = false) {
+            let className = 'hydrant-icon operational';
+            if (condition === 'Unserviceable') {
+                className = 'hydrant-icon unserviceable';
+            }
+            if (isNearest) {
+                className = 'hydrant-icon nearest';
+            }
+            
+            const size = isNearest ? 32 : 24;
+            
+            // Create SVG for hydrant icon
+            const svg = `
+                <svg class="${className}" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M12 2C8.13 2 5 5.13 5 9C5 14.25 12 22 12 22C12 22 19 14.25 19 9C19 5.13 15.87 2 12 2Z" fill="#3B82F6"/>
+                    <path d="M12 6C10.34 6 9 7.34 9 9C9 10.66 10.34 12 12 12C13.66 12 15 10.66 15 9C15 7.34 13.66 6 12 6Z" fill="white"/>
+                    <path d="M12 2V6" stroke="white" stroke-width="2"/>
+                    <path d="M9 9H15" stroke="white" stroke-width="2"/>
+                </svg>
+            `;
+            
+            return L.divIcon({
+                className: 'hydrant-marker',
+                html: svg,
+                iconSize: [size, size],
+                iconAnchor: [size / 2, size / 2]
+            });
+        }
+
+        // Function to add fire hydrants to the map
+        function addFireHydrants() {
+            fireHydrants.forEach(hydrant => {
+                const marker = L.marker([hydrant.Latitude, hydrant.Longitude], {
+                    icon: createHydrantIcon(hydrant["Present Condition"])
+                }).addTo(map);
+                
+                // Create popup content
+                const popupContent = `
+                    <div class="p-2">
+                        <h4 class="font-bold text-sm">Fire Hydrant</h4>
+                        <p class="text-xs mt-1"><strong>Condition:</strong> ${hydrant["Present Condition"]}</p>
+                        <p class="text-xs"><strong>Remarks:</strong> ${hydrant.Remarks}</p>
+                        <p class="text-xs text-gray-600 mt-1">
+                            <strong>Location:</strong> ${hydrant.Latitude.toFixed(6)}, ${hydrant.Longitude.toFixed(6)}
+                        </p>
+                    </div>
+                `;
+                
+                marker.bindPopup(popupContent);
+            });
+        }
+
+        // Function to find nearest hydrant to a given location
+        function findNearestHydrant(lat, lng) {
+            let nearestHydrant = null;
+            let minDistance = Infinity;
+            
+            fireHydrants.forEach(hydrant => {
+                // Skip unserviceable hydrants
+                if (hydrant["Present Condition"] === "Unserviceable") return;
+                
+                const distance = calculateDistance([lat, lng], [hydrant.Latitude, hydrant.Longitude]);
+                
+                if (distance < minDistance) {
+                    minDistance = distance;
+                    nearestHydrant = hydrant;
+                }
+            });
+            
+            return { hydrant: nearestHydrant, distance: minDistance };
+        }
+
+        // Function to highlight nearest hydrant - ONLY if within 50ft
+        function highlightNearestHydrant(lat, lng) {
+            // Remove previous nearest hydrant marker and line
+            if (nearestHydrantMarker) {
+                map.removeLayer(nearestHydrantMarker);
+            }
+            if (hydrantLine) {
+                map.removeLayer(hydrantLine);
+            }
+            
+            // Find nearest hydrant
+            const { hydrant, distance } = findNearestHydrant(lat, lng);
+            
+            if (!hydrant) {
+                console.log("No operational hydrants found nearby");
+                document.getElementById('nearestHydrantCard').classList.add('hidden');
+                return;
+            }
+            
+            // Convert distance to feet for comparison (1 km = 3280.84 feet)
+            const distanceInFeet = distance * 3280.84;
+            
+            // Only highlight if hydrant is within 50 feet
+            const isWithinRange = distanceInFeet <= 50;
+            
+            console.log(`Nearest hydrant is ${distanceInFeet.toFixed(0)} feet away - ${isWithinRange ? 'within range, highlighting' : 'too far, not highlighting'}`);
+            
+            if (isWithinRange) {
+                // Add special marker for nearest hydrant
+                nearestHydrantMarker = L.marker([hydrant.Latitude, hydrant.Longitude], {
+                    icon: createHydrantIcon(hydrant["Present Condition"], true)
+                }).addTo(map);
+                
+                // Create popup content
+                const popupContent = `
+                    <div class="p-2">
+                        <h4 class="font-bold text-sm text-green-600">Nearest Fire Hydrant</h4>
+                        <p class="text-xs mt-1"><strong>Distance:</strong> ${distanceInFeet.toFixed(0)} feet</p>
+                        <p class="text-xs"><strong>Condition:</strong> ${hydrant["Present Condition"]}</p>
+                        <p class="text-xs"><strong>Pressure:</strong> ${hydrant.Remarks}</p>
+                        <p class="text-xs text-gray-600 mt-1">
+                            <strong>Location:</strong> ${hydrant.Latitude.toFixed(6)}, ${hydrant.Longitude.toFixed(6)}
+                        </p>
+                        <p class="text-xs text-green-600 mt-1 font-semibold">✓ Within 50 feet - Ready for connection</p>
+                    </div>
+                `;
+                
+                nearestHydrantMarker.bindPopup(popupContent).openPopup();
+                
+                // Add connection line only if within range
+                hydrantLine = L.polyline([
+                    [lat, lng],
+                    [hydrant.Latitude, hydrant.Longitude]
+                ], {
+                    color: '#10b981',
+                    weight: 4,
+                    opacity: 0.8,
+                    dashArray: '5, 10'
+                }).addTo(map);
+            } else {
+                console.log("Hydrant is beyond 50 feet - no highlighting or connection line");
+            }
+            
+            // Update nearest hydrant info card regardless of distance
+            updateNearestHydrantInfo(hydrant, distanceInFeet, isWithinRange);
+            
+            // Return whether highlighting was done
+            return isWithinRange;
+        }
+
+        // Function to update nearest hydrant information card with distance in feet
+        function updateNearestHydrantInfo(hydrant, distanceInFeet, isWithinRange) {
+            document.getElementById('nearestHydrantCard').classList.remove('hidden');
+            document.getElementById('hydrant-distance').textContent = `${distanceInFeet.toFixed(0)} feet`;
+            document.getElementById('hydrant-condition').textContent = hydrant["Present Condition"];
+            document.getElementById('hydrant-pressure').textContent = hydrant.Remarks;
+            document.getElementById('hydrant-coords').textContent = `${hydrant.Latitude.toFixed(4)}, ${hydrant.Longitude.toFixed(4)}`;
+            
+            const card = document.getElementById('nearestHydrantCard');
+            if (isWithinRange) {
+                // Change styling to indicate connection is possible
+                card.style.background = '#dbeafe';
+                card.style.borderLeft = '4px solid #10b981';
+                card.classList.remove('warning');
+                
+                // Remove any existing warning message
+                const existingWarning = document.getElementById('distance-warning');
+                if (existingWarning) {
+                    existingWarning.remove();
+                }
+                
+                // Add success message if not already present
+                const contentDiv = document.getElementById('nearest-hydrant-content');
+                if (!document.getElementById('distance-success')) {
+                    const successDiv = document.createElement('div');
+                    successDiv.id = 'distance-success';
+                    successDiv.className = 'mt-2 p-2 bg-green-50 rounded text-xs text-green-700';
+                    successDiv.innerHTML = '<i data-feather="check-circle" class="w-3 h-3 inline mr-1"></i> Hydrant is within 50 feet - Ready for connection';
+                    contentDiv.appendChild(successDiv);
+                    feather.replace();
+                }
+            } else {
+                // Change styling to indicate connection is NOT possible
+                card.style.background = '#fef3c7';
+                card.style.borderLeft = '4px solid #f59e0b';
+                card.classList.add('warning');
+                
+                // Add warning message if not already present
+                const contentDiv = document.getElementById('nearest-hydrant-content');
+                if (!document.getElementById('distance-warning')) {
+                    const warningDiv = document.createElement('div');
+                    warningDiv.id = 'distance-warning';
+                    warningDiv.className = 'mt-2 p-2 bg-red-50 rounded text-xs text-red-700';
+                    warningDiv.innerHTML = '<i data-feather="alert-triangle" class="w-3 h-3 inline mr-1"></i> Hydrant is too far for connection (max 50 feet) - Not highlighted on map';
+                    contentDiv.appendChild(warningDiv);
+                    feather.replace();
+                }
+                
+                // Remove success message if present
+                const existingSuccess = document.getElementById('distance-success');
+                if (existingSuccess) {
+                    existingSuccess.remove();
+                }
+            }
+        }
+
+        // Calculate distance between two points in km
+        function calculateDistance(point1, point2) {
+            const [lat1, lon1] = point1;
+            const [lat2, lon2] = point2;
+            
+            const R = 6371; // Earth's radius in km
+            const dLat = (lat2 - lat1) * Math.PI / 180;
+            const dLon = (lon2 - lon1) * Math.PI / 180;
+            const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+                      Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+                      Math.sin(dLon/2) * Math.sin(dLon/2);
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+            return R * c;
+        }
+
+        // Initialize map with default view (will be updated with user's location)
+        function initMap() {
+            // Check if map container exists
+            if (!document.getElementById('map')) {
+                console.error('Map container not found');
+                return;
+            }
+            
+            try {
+                map = L.map('map').setView([14.272416030761997, 121.4014354512121], 13);
+                
+                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+                    maxZoom: 19 
+                }).addTo(map);
+
+                // Add fire hydrants to the map
+                addFireHydrants();
+
+                // Add map click handler AFTER map is initialized
+                map.on('click', function(e) {
+                    setDestinationMarker(e.latlng);
+                });
+
+                console.log('Map initialized successfully');
+            } catch (error) {
+                console.error('Error initializing map:', error);
+            }
+        }
+
+        // Set destination marker at specified coordinates
+        function setDestinationMarker(latlng) {
+            // Remove previous destination marker if exists
+            if (destinationMarker) {
+                map.removeLayer(destinationMarker);
+            }
+
+            // Add new destination marker
+            destinationMarker = L.marker(latlng, {
+                icon: L.icon({
+                    iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-red.png',
+                    iconSize: [25, 41],
+                    iconAnchor: [12, 41],
+                    popupAnchor: [1, -34]
+                })
+            }).addTo(map);
+
+            destinationMarker.bindPopup(`<b>Incident Location</b><br>Lat: ${latlng.lat.toFixed(4)}, Lng: ${latlng.lng.toFixed(4)}`).openPopup();
+            destinationLatLng = latlng;
+            
+            // Find and highlight nearest hydrant (only if within 50ft)
+            const isHighlighted = highlightNearestHydrant(latlng.lat, latlng.lng);
+            
+            console.log('Destination set:', latlng);
+            console.log(`Hydrant highlighted: ${isHighlighted ? 'YES (within 50ft)' : 'NO (beyond 50ft)'}`);
+        }
+
+        // Calculate route from current location to destination
+        function calculateRoute(startLatLng, endLatLng) {
+            // Remove previous route if exists
+            if (routingControl) {
+                map.removeControl(routingControl);
+            }
+            
+            // Clear previous routes
+            alternativeRoutes = [];
+            routeLayers.forEach(layer => {
+                if (layer && map.hasLayer(layer)) {
+                    map.removeLayer(layer);
+                }
+            });
+            routeLayers = [];
+            
+            // Add new route
+            routingControl = L.Routing.control({
+                waypoints: [
+                    L.latLng(startLatLng),
+                    L.latLng(endLatLng)
+                ],
+                routeWhileDragging: false,
+                showAlternatives: true, // Enable alternative routes
+                addWaypoints: false,
+                draggableWaypoints: false,
+                fitSelectedRoutes: true,
+                lineOptions: {
+                    styles: [
+                        {color: '#b91c1c', opacity: 0.7, weight: 5}, // Main route
+                        {color: '#3b82f6', opacity: 0.5, weight: 3}, // Alternative 1
+                        {color: '#10b981', opacity: 0.5, weight: 3}  // Alternative 2
+                    ]
+                },
+                altLineOptions: {
+                    styles: [
+                        {color: '#6b7280', opacity: 0.5, weight: 3, dashArray: '5, 10'},
+                        {color: '#6b7280', opacity: 0.5, weight: 3, dashArray: '5, 10'}
+                    ]
+                },
+                createMarker: function(i, waypoint, n) {
+                    if (i === 0) {
+                        return currentLocationMarker;
+                    }
+                    return destinationMarker;
+                }
+            }).addTo(map);
+            
+            // Show route info box
+            document.getElementById('routeInfo').classList.remove('hidden');
+            
+            // Listen for route calculation
+            routingControl.on('routesfound', function(e) {
+                const routes = e.routes;
+                
+                // Store alternative routes
+                alternativeRoutes = routes.map(route => ({
+                    summary: route.summary,
+                    instructions: route.instructions,
+                    coordinates: route.coordinates
+                }));
+                
+                // Display alternative routes
+                displayAlternativeRoutes(alternativeRoutes);
+                
+                // Select the fastest route by default
+                if (alternativeRoutes.length > 0) {
+                    selectRoute(0);
+                }
+                
+                // Update current position metrics
+                document.getElementById('speed').textContent = currentSpeed.toFixed(1) + ' km/h';
+                document.getElementById('heading').textContent = Math.round(currentHeading) + '°';
+            });
+        }
+
+        // Display alternative routes
+        function displayAlternativeRoutes(routes) {
+            const container = document.getElementById('alternativeRoutes');
+            container.innerHTML = '';
+            
+            if (!routes || routes.length === 0) {
+                container.innerHTML = '<p class="text-sm text-gray-600">No alternative routes available</p>';
+                return;
+            }
+            
+            // Sort routes by time (fastest first)
+            routes.sort((a, b) => a.summary.totalTime - b.summary.totalTime);
+            
+            routes.forEach((route, index) => {
+                const timeMin = Math.round(route.summary.totalTime / 60);
+                const distanceKm = (route.summary.totalDistance / 1000).toFixed(1);
+                const isFastest = index === 0;
+                
+                const routeElement = document.createElement('div');
+                routeElement.className = `route-option ${isFastest ? 'fastest' : ''} ${index === currentRouteIndex ? 'active' : ''}`;
+                routeElement.innerHTML = `
+                    <div class="route-details">
+                        <div>
+                            <span class="font-semibold">Route ${index + 1}</span>
+                            ${isFastest ? '<span class="fastest-badge">FASTEST</span>' : ''}
+                        </div>
+                        <div class="route-stats">
+                            <div class="route-stat">
+                                <span class="route-stat-value">${timeMin} min</span>
+                                <span class="route-stat-label">Time</span>
+                            </div>
+                            <div class="route-stat">
+                                <span class="route-stat-value">${distanceKm} km</span>
+                                <span class="route-stat-label">Distance</span>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                
+                routeElement.addEventListener('click', () => {
+                    selectRoute(index);
+                });
+                
+                container.appendChild(routeElement);
+            });
+        }
+
+        // Select a specific route
+        function selectRoute(routeIndex) {
+            if (!alternativeRoutes[routeIndex]) return;
+            
+            currentRouteIndex = routeIndex;
+            
+            // Update route display
+            const routeOptions = document.querySelectorAll('.route-option');
+            routeOptions.forEach((option, index) => {
+                if (index === routeIndex) {
+                    option.classList.add('active');
+                } else {
+                    option.classList.remove('active');
+                }
+            });
+            
+            // Update main route info
+            const route = alternativeRoutes[routeIndex];
+            const responseTimeMin = Math.round(route.summary.totalTime / 60);
+            const distanceKm = (route.summary.totalDistance / 1000).toFixed(1);
+            
+            document.getElementById('eta').textContent = responseTimeMin + ' minutes';
+            document.getElementById('distance').textContent = distanceKm + ' km';
+            
+            // Get first instruction
+            if (route.instructions && route.instructions.length > 0) {
+                document.getElementById('instructions').textContent = route.instructions[0].text;
+            } else {
+                document.getElementById('instructions').textContent = 'Follow the route';
+            }
+            
+            // Highlight the selected route on the map
+            highlightSelectedRoute(routeIndex);
+        }
+
+        // Highlight the selected route on the map
+        function highlightSelectedRoute(routeIndex) {
+            // Remove all existing route layers
+            routeLayers.forEach(layer => {
+                if (layer && map.hasLayer(layer)) {
+                    map.removeLayer(layer);
+                }
+            });
+            routeLayers = [];
+            
+            // Add the selected route with highlighted style
+            const selectedRoute = alternativeRoutes[routeIndex];
+            if (selectedRoute && selectedRoute.coordinates) {
+                const routeLayer = L.polyline(selectedRoute.coordinates, {
+                    color: '#b91c1c',
+                    weight: 6,
+                    opacity: 0.9
+                }).addTo(map);
+                routeLayers.push(routeLayer);
+                
+                // Add alternative routes with less prominent style
+                alternativeRoutes.forEach((route, index) => {
+                    if (index !== routeIndex && route.coordinates) {
+                        const altRouteLayer = L.polyline(route.coordinates, {
+                            color: '#6b7280',
+                            weight: 3,
+                            opacity: 0.5,
+                            dashArray: '5, 10'
+                        }).addTo(map);
+                        routeLayers.push(altRouteLayer);
+                    }
+                });
+            }
+        }
+
+        // Search for locations using GraphHopper Geocoding API with Santa Cruz bounds
+        async function searchLocations(query) {
+            if (!query || query.length < 2) {
+                hideSearchResults();
+                return;
+            }
+
+            showSearchLoading();
+            
+            try {
+                const apiKey = '92bf00ca-1e51-4739-9e62-4ca42c5ba889';
+                
+                // Construct the API URL with bounding box for Santa Cruz, Laguna
+                const bbox = `${SANTA_CRUZ_BOUNDS.southWest[1]},${SANTA_CRUZ_BOUNDS.southWest[0]},${SANTA_CRUZ_BOUNDS.northEast[1]},${SANTA_CRUZ_BOUNDS.northEast[0]}`;
+                
+                const url = `https://graphhopper.com/api/1/geocode?q=${encodeURIComponent(query)}&locale=en&key=${apiKey}&bbox=${bbox}&limit=8`;
+                
+                const response = await fetch(url);
+                
+                if (!response.ok) {
+                    throw new Error(`API request failed with status ${response.status}`);
+                }
+                
+                const data = await response.json();
+                
+                // Filter results to ensure they're within Santa Cruz bounds
+                const filteredHits = data.hits ? data.hits.filter(hit => {
+                    if (!hit.point) return false;
+                    
+                    const lat = hit.point.lat;
+                    const lng = hit.point.lng;
+                    
+                    // Check if the point is within our Santa Cruz bounds
+                    return lat >= SANTA_CRUZ_BOUNDS.southWest[0] && 
+                           lat <= SANTA_CRUZ_BOUNDS.northEast[0] && 
+                           lng >= SANTA_CRUZ_BOUNDS.southWest[1] && 
+                           lng <= SANTA_CRUZ_BOUNDS.northEast[1];
+                }) : [];
+                
+                displaySearchResults(filteredHits);
+            } catch (error) {
+                console.error('Error searching locations:', error);
+                displaySearchError('Failed to search locations. Please try again.');
+            }
+        }
+
+        // Show search loading indicator
+        function showSearchLoading() {
+            const resultsContainer = document.getElementById('mapSearchResults');
+            resultsContainer.innerHTML = `
+                <div class="search-loading">
+                    <i data-feather="loader" class="search-loading-icon w-4 h-4"></i>
+                    Searching Santa Cruz, Laguna...
+                </div>
+            `;
+            resultsContainer.style.display = 'block';
+            feather.replace();
+        }
+
+        // Display search results
+        function displaySearchResults(results) {
+            const resultsContainer = document.getElementById('mapSearchResults');
+            
+            if (results.length === 0) {
+                resultsContainer.innerHTML = '<div class="search-loading">No results found in Santa Cruz, Laguna</div>';
+                return;
+            }
+            
+            let html = '';
+            
+            // Group by type
+            const points = results.filter(r => r.point && (r.name || r.street));
+            const cities = results.filter(r => r.city && !r.point);
+            
+            if (points.length > 0) {
+                points.forEach(result => {
+                    html += createSearchResultItem(result, 'map-pin');
+                });
+            }
+            
+            if (cities.length > 0) {
+                cities.forEach(result => {
+                    html += createSearchResultItem(result, 'map');
+                });
+            }
+            
+            resultsContainer.innerHTML = html;
+            resultsContainer.style.display = 'block';
+            feather.replace();
+        }
+
+        // Create HTML for a search result item
+        function createSearchResultItem(result, iconType = 'map-pin') {
+            let name = result.name || result.street || '';
+            let details = [];
+            
+            if (result.housenumber) details.push(result.housenumber);
+            if (result.street && result.street !== name) details.push(result.street);
+            if (result.city) details.push(result.city);
+            if (result.country) details.push(result.country);
+            
+            const detailText = details.length > 0 ? details.join(', ') : '';
+            
+            return `
+                <div class="search-result-item" data-lat="${result.point ? result.point.lat : ''}" data-lng="${result.point ? result.point.lng : ''}">
+                    <div class="search-result-icon">
+                        <i data-feather="${iconType}" class="w-4 h-4"></i>
+                    </div>
+                    <div class="search-result-content">
+                        <div class="search-result-name">${name}</div>
+                        <div class="search-result-details">${detailText}</div>
+                    </div>
+                </div>
+            `;
+        }
+
+        // Display search error
+        function displaySearchError(message) {
+            const resultsContainer = document.getElementById('mapSearchResults');
+            resultsContainer.innerHTML = `<div class="search-loading">${message}</div>`;
+            resultsContainer.style.display = 'block';
+        }
+
+        // Hide search results
+        function hideSearchResults() {
+            const resultsContainer = document.getElementById('mapSearchResults');
+            resultsContainer.style.display = 'none';
+        }
+
+        // Update search clear button visibility
+        function updateSearchClearButton() {
+            const searchInput = document.getElementById('mapSearchInput');
+            const clearButton = document.getElementById('mapSearchClear');
+            
+            if (searchInput.value.length > 0) {
+                clearButton.style.display = 'block';
+            } else {
+                clearButton.style.display = 'none';
+            }
+        }
+
+        // Clear search input and results
+        function clearSearch() {
+            const searchInput = document.getElementById('mapSearchInput');
+            searchInput.value = '';
+            hideSearchResults();
+            updateSearchClearButton();
+            searchInput.focus();
+        }
+
+        // Show location modal to request user permission
+        function showLocationModal() {
+            const modal = document.getElementById('locationModal');
+            modal.classList.remove('hidden');
+            
+            // Reset modal content
+            document.getElementById('locationRequestContent').classList.remove('hidden');
+            document.getElementById('locationDetectingContent').classList.add('hidden');
+            document.getElementById('locationErrorContent').classList.add('hidden');
+        }
+
+        // Hide location modal
+        function hideLocationModal() {
+            const modal = document.getElementById('locationModal');
+            modal.classList.add('hidden');
+        }
+
+        // Show detecting state in modal
+        function showDetectingState() {
+            document.getElementById('locationRequestContent').classList.add('hidden');
+            document.getElementById('locationDetectingContent').classList.remove('hidden');
+            document.getElementById('locationErrorContent').classList.add('hidden');
+        }
+
+        // Show error state in modal
+        function showErrorState(errorMsg = null) {
+            document.getElementById('locationRequestContent').classList.add('hidden');
+            document.getElementById('locationDetectingContent').classList.add('hidden');
+            document.getElementById('locationErrorContent').classList.remove('hidden');
+
+            if (errorMsg) {
+                const errorP = document.getElementById('locationErrorMsg');
+                if (errorP) {
+                    errorP.textContent = errorMsg;
+                }
+            }
+        }
+
+        // Automatically detect user location on page load
+        function autoDetectLocation() {
+            if (!navigator.geolocation) {
+                console.log('Geolocation is not supported by this browser');
+                showErrorState('Geolocation is not supported by your browser. Please use a modern browser.');
+                return;
+            }
+
+            showLocationModal();
+        }
+
+        // Locate user and center map
+        function locateUser(isAutomatic = false) {
+            if (!navigator.geolocation) {
+                const errorMsg = 'Geolocation is not supported by your browser.';
+                console.error(errorMsg);
+                if (isAutomatic) {
+                    showErrorState(errorMsg);
+                } else {
+                    alert(errorMsg);
+                }
+                updateLocationStatus(false);
+                return;
+            }
+
+            // Check for secure context
+            if (window.isSecureContext === false) {
+                const errorMsg = 'Geolocation requires a secure connection (HTTPS). Please serve this page over HTTPS, use localhost, or open via a secure browser. On mobile, try adding to home screen or using a local server.';
+                console.error(errorMsg);
+                if (isAutomatic) {
+                    showErrorState(errorMsg);
+                } else {
+                    alert(errorMsg);
+                }
+                updateLocationStatus(false);
+                return;
+            }
+
+            if (isAutomatic) {
+                showDetectingState();
+            }
+
+            navigator.geolocation.getCurrentPosition(
+                function(position) {
+                    const latlng = [position.coords.latitude, position.coords.longitude];
+                    
+                    // Update or create current location marker
+                    if (currentLocationMarker) {
+                        currentLocationMarker.setLatLng(latlng);
+                    } else {
+                        currentLocationMarker = L.marker(latlng, {
+                            icon: L.icon({
+                                iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-green.png',
+                                iconSize: [25, 41],
+                                iconAnchor: [12, 41],
+                                popupAnchor: [1, -34]
+                            })
+                        }).addTo(map);
+                        currentLocationMarker.bindPopup('<b>Your Current Location</b>').openPopup();
+                    }
+                    
+                    map.setView(latlng, 15);
+                    updateLocationStatus(true);
+                    currentPosition = position;
+                    
+                    // If destination is set, update route
+                    if (destinationLatLng) {
+                        calculateRoute(latlng, destinationLatLng);
+                    }
+                    
+                    // Hide modal if it was automatic detection
+                    if (isAutomatic) {
+                        hideLocationModal();
+                    }
+                },
+                function(error) {
+                    let errorMsg = 'Unable to get your location. Please ensure location services are enabled and try again.';
+                    switch(error.code) {
+                        case error.PERMISSION_DENIED:
+                            errorMsg = 'Location access denied. Please check your device settings and browser permissions for this site/app, then refresh and try again. Ensure location is allowed for all apps/websites.';
+                            break;
+                        case error.POSITION_UNAVAILABLE:
+                            errorMsg = 'Location information is unavailable. Please check your internet connection and GPS signal.';
+                            break;
+                        case error.TIMEOUT:
+                            errorMsg = 'Location request timed out. Please try again in a moment with better GPS signal.';
+                            break;
+                        default:
+                            errorMsg = `Location error: ${error.message}. Please check settings and retry.`;
+                    }
+                    console.error('Error getting location:', errorMsg, error);
+                    
+                    // Only show alert for manual location requests
+                    if (!isAutomatic) {
+                        alert(errorMsg);
+                        updateLocationStatus(false);
+                    } else {
+                        // For automatic detection, show error state in modal
+                        showErrorState(errorMsg);
+                    }
+                },
+                {
+                    enableHighAccuracy: true,
+                    timeout: 15000, // Increased timeout for mobile
+                    maximumAge: 60000
+                }
+            );
+        }
+
+        // Toggle continuous tracking
+        function toggleTracking() {
+            const button = document.getElementById('toggleTracking');
+            
+            if (!isTracking) {
+                // Start tracking
+                if (!navigator.geolocation) {
+                    alert('Geolocation is not supported by your browser');
+                    return;
+                }
+
+                // Check secure context for watchPosition as well
+                if (window.isSecureContext === false) {
+                    alert('Continuous tracking requires a secure connection (HTTPS). Please serve this page over HTTPS or use localhost.');
+                    return;
+                }
+
+                watchId = navigator.geolocation.watchPosition(
+                    function(position) {
+                        const latlng = [position.coords.latitude, position.coords.longitude];
+                        
+                        // Calculate speed and heading if we have previous position
+                        if (previousPosition) {
+                            calculateMovementMetrics(previousPosition, position);
+                        }
+                        
+                        previousPosition = position;
+                        currentPosition = position;
+                        
+                        // Update marker position
+                        if (currentLocationMarker) {
+                            currentLocationMarker.setLatLng(latlng);
+                        } else {
+                            currentLocationMarker = L.marker(latlng, {
+                                icon: L.icon({
+                                    iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-green.png',
+                                    iconSize: [25, 41],
+                                    iconAnchor: [12, 41],
+                                    popupAnchor: [1, -34]
+                                })
+                            }).addTo(map);
+                        }
+                        
+                        // If destination is set and we're navigating, update the route
+                        if (destinationLatLng && routingControl) {
+                            updateRoutePosition(latlng);
+                        }
+                    },
+                    function(error) {
+                        console.error('Error watching position:', error);
+                        let errorMsg = 'Tracking error occurred.';
+                        switch(error.code) {
+                            case error.PERMISSION_DENIED:
+                                errorMsg = 'Location access denied during tracking. Please check permissions.';
+                                break;
+                            case error.POSITION_UNAVAILABLE:
+                                errorMsg = 'Location unavailable during tracking.';
+                                break;
+                            case error.TIMEOUT:
+                                errorMsg = 'Tracking timed out. Retrying...';
+                                break;
+                        }
+                        console.error(errorMsg, error);
+                        updateLocationStatus(false);
+                    },
+                    {
+                        enableHighAccuracy: true,
+                        timeout: 10000, // Increased for better mobile reliability
+                        maximumAge: 5000 // Shorter age for more frequent updates
+                    }
+                );
+
+                isTracking = true;
+                button.innerHTML = '<i data-feather="pause" class="w-4 h-4"></i><span>Stop Tracking</span>';
+                button.className = 'px-3 py-2 bg-red-500 text-white rounded-lg text-sm flex items-center space-x-1';
+                updateLocationStatus(true);
+                
+                // Update mobile button
+                const mobileTrackBtn = document.getElementById('mobileTrack');
+                mobileTrackBtn.innerHTML = '<i data-feather="pause" class="w-5 h-5 mb-1"></i><span class="text-xs">Stop</span>';
+                mobileTrackBtn.className = 'mobile-control-btn bg-red-500 text-white';
+            } else {
+                // Stop tracking
+                navigator.geolocation.clearWatch(watchId);
+                isTracking = false;
+                button.innerHTML = '<i data-feather="map-pin" class="w-4 h-4"></i><span>Start Tracking</span>';
+                button.className = 'px-3 py-2 bg-green-500 text-white rounded-lg text-sm flex items-center space-x-1';
+                
+                // Update mobile button
+                const mobileTrackBtn = document.getElementById('mobileTrack');
+                mobileTrackBtn.innerHTML = '<i data-feather="map-pin" class="w-5 h-5 mb-1"></i><span class="text-xs">Track</span>';
+                mobileTrackBtn.className = 'mobile-control-btn bg-green-500 text-white';
+            }
+            feather.replace();
+        }
+
+        // Calculate movement metrics (speed and heading)
+        function calculateMovementMetrics(prevPos, currPos) {
+            // Calculate distance in meters
+            const lat1 = prevPos.coords.latitude;
+            const lon1 = prevPos.coords.longitude;
+            const lat2 = currPos.coords.latitude;
+            const lon2 = currPos.coords.longitude;
+            
+            const R = 6371000; // Earth's radius in meters
+            const dLat = (lat2 - lat1) * Math.PI / 180;
+            const dLon = (lon2 - lon1) * Math.PI / 180;
+            const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+                      Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+                      Math.sin(dLon/2) * Math.sin(dLon/2);
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+            const distance = R * c;
+            
+            // Calculate time difference in hours
+            const timeDiff = (currPos.timestamp - prevPos.timestamp) / 1000 / 3600;
+            
+            // Speed in km/h
+            if (timeDiff > 0) {
+                currentSpeed = (distance / 1000) / timeDiff;
+            }
+            
+            // Calculate heading
+            const y = Math.sin(dLon) * Math.cos(lat2 * Math.PI / 180);
+            const x = Math.cos(lat1 * Math.PI / 180) * Math.sin(lat2 * Math.PI / 180) -
+                      Math.sin(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.cos(dLon);
+            currentHeading = (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
+        }
+
+        // Update location status indicator
+        function updateLocationStatus(active) {
+            const statusElement = document.getElementById('location-status');
+            if (statusElement) {
+                if (active) {
+                    statusElement.textContent = 'Location Active';
+                    statusElement.className = 'location-status location-active';
+                } else {
+                    statusElement.textContent = 'Location Off';
+                    statusElement.className = 'location-status location-inactive';
+                }
+            }
+        }
+
+        // Update route position during navigation
+        function updateRoutePosition(currentLatLng) {
+            if (routingControl && destinationLatLng) {
+                // Remove old route and calculate new one
+                map.removeControl(routingControl);
+                calculateRoute(currentLatLng, destinationLatLng);
+            }
+        }
+
+        // Fetch weather data with fallback
+        async function fetchWeather() {
+            try {
+                // Try multiple weather API endpoints as fallback
+                const apiKeys = [
+                    'e480bec2951804e81f84999747008cbb', // Original key
+                    'demo' // Fallback to demo mode
+                ];
+                
+                let weatherData = null;
+                
+                for (const apiKey of apiKeys) {
+                    try {
+                        const response = await fetch(`https://api.openweathermap.org/data/2.5/weather?q=Santa Cruz,Laguna,PH&units=metric&appid=${apiKey}`);
+                        if (response.ok) {
+                            weatherData = await response.json();
+                            break;
+                        }
+                    } catch (error) {
+                        console.warn(`Weather API key ${apiKey} failed:`, error);
+                        continue;
+                    }
+                }
+                
+                if (weatherData) {
+                    document.getElementById('weather-temp').textContent = `${Math.round(weatherData.main.temp)}°C`;
+                    document.getElementById('weather-condition').textContent = weatherData.weather[0].main;
+                    document.getElementById('weather-humidity').textContent = `${weatherData.main.humidity}%`;
+                    document.getElementById('weather-wind').textContent = `${(weatherData.wind.speed * 3.6).toFixed(1)} km/h`;
+                    
+                    // Store weather data for prediction
+                    currentWeatherData = {
+                        temperature: Math.round(weatherData.main.temp),
+                        humidity: weatherData.main.humidity,
+                        windSpeed: (weatherData.wind.speed * 3.6).toFixed(1),
+                        condition: weatherData.weather[0].main
+                    };
+                    console.log('Weather data loaded successfully');
+                } else {
+                    throw new Error('All weather API attempts failed');
+                }
+            } catch (error) {
+                console.error('Error fetching weather data:', error);
+                // Set default weather data
+                currentWeatherData = {
+                    temperature: 28,
+                    humidity: 75,
+                    windSpeed: 12,
+                    condition: 'Clear'
+                };
+                
+                // Update UI with default values
+                document.getElementById('weather-temp').textContent = '28°C';
+                document.getElementById('weather-condition').textContent = 'Clear';
+                document.getElementById('weather-humidity').textContent = '75%';
+                document.getElementById('weather-wind').textContent = '12 km/h';
+                
+                console.log('Using default weather data');
+            }
+        }
+
+        // Update current time
+        function updateTime() {
+            const now = new Date();
+            const options = { 
+                weekday: 'long', 
+                year: 'numeric', 
+                month: 'long', 
+                day: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit'
+            };
+            document.getElementById('current-time').textContent = now.toLocaleDateString('en-US', options);
+        }
+
+        // Toggle mobile sidebar
+        function toggleSidebar() {
+            const sidebar = document.querySelector('.sidebar');
+            const overlay = document.getElementById('overlay');
+            sidebar.classList.toggle('active');
+            overlay.classList.toggle('active');
+        }
+
+        // Setup the incident learning system
+        function setupIncidentLearning() {
+            // Quick Report Button
+            document.getElementById('quickReportBtn').addEventListener('click', function() {
+                reportNewIncident('quick');
+            });
+
+            // Detailed Report Button
+            document.getElementById('detailedReportBtn').addEventListener('click', function() {
+                reportNewIncident('detailed');
+            });
+
+            // Auto-report when navigation is completed (simulated)
+            setupAutoReporting();
+        }
+
+        // Report new fire incident
+        async function reportNewIncident(reportType) {
+            const severity = document.getElementById('incidentSeverity').value;
+            const type = document.getElementById('incidentType').value;
+
+            if (!severity || !type) {
+                alert('Please select both severity and incident type');
+                return;
+            }
+
+            // Get current location or use destination
+            const location = destinationLatLng ? 
+                `Location: ${destinationLatLng.lat.toFixed(4)}, ${destinationLatLng.lng.toFixed(4)}` :
+                'Location: Current response area';
+
+            // Get weather data
+            const weather = currentWeatherData ? 
+                `Weather: ${currentWeatherData.condition}, ${currentWeatherData.temperature}°C` :
+                'Weather: Unknown';
+
+            const incidentData = {
+                severity: severity,
+                type: type,
+                location: location,
+                weather: weather,
+                reportType: reportType
+            };
+
+            try {
+                // Store incident using the enhanced learner
+                const result = await incidentLearner.storeIncident(incidentData);
+                
+                // Auto-train if we have enough data
+                if (incidentLearner.trainingData.length >= 5) {
+                    await incidentLearner.trainModel(incidentLearner.trainingData);
+                    
+                    // Get combined feedback (prediction + historical)
+                    const feedback = await incidentLearner.getFeedback(incidentData);
+                    if (feedback && !feedback.error) {
+                        const { prediction, historical } = feedback;
+                        if (prediction && !prediction.error) {
+                            incidentLearner.showNotification(
+                                `Predicted: ${prediction.predicted_response_time} (${(prediction.confidence * 100).toFixed(1)}% confidence)`
+                            );
+                        }
+                        incidentLearner.showNotification(historical.message);
+                    } else {
+                        incidentLearner.showNotification(feedback.error || 'Feedback unavailable');
+                    }
+                } else {
+                    incidentLearner.showNotification(
+                        `Incident recorded! Need ${5 - incidentLearner.trainingData.length} more to enable predictions.`
+                    );
+                }
+
+                // Clear form
+                document.getElementById('incidentSeverity').value = '';
+                document.getElementById('incidentType').value = '';
+
+            } catch (error) {
+                console.error('Error reporting incident:', error);
+                alert('Error reporting incident: ' + error.message);
+            }
+        }
+
+        // Setup auto-reporting for simulated incidents
+        function setupAutoReporting() {
+            // Simulate automatic incident reporting every 2-5 minutes
+            setInterval(() => {
+                if (Math.random() < 0.3) { // 30% chance to simulate an incident
+                    simulateAutoIncident();
+                }
+            }, 120000 + Math.random() * 180000); // 2-5 minutes
+        }
+
+        // Simulate automatic incident reporting
+        function simulateAutoIncident() {
+            const severities = ['minor', 'moderate', 'major', 'severe'];
+            const types = ['Residential', 'Commercial', 'Vehicle', 'Wildfire', 'Other'];
+            
+            const severity = severities[Math.floor(Math.random() * severities.length)];
+            const type = types[Math.floor(Math.random() * types.length)];
+
+            const incidentData = {
+                severity: severity,
+                type: type,
+                location: 'Simulated auto-report',
+                weather: 'Auto-detected',
+                reportType: 'auto',
+                timestamp: new Date().toISOString()
+            };
+
+            incidentLearner.storeIncident(incidentData);
+        }
+
+        // Initialize the application
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('DOM loaded, initializing application...');
+            
+            // Initialize map first
+            initMap();
+            
+            // Set up event listeners after DOM is ready
+            document.getElementById('locateMe').addEventListener('click', function() {
+                locateUser(false);
+            });
+            document.getElementById('toggleTracking').addEventListener('click', toggleTracking);
+            
+            // Location modal event listeners
+            document.getElementById('allowLocation').addEventListener('click', function() {
+                locateUser(true);
+            });
+            document.getElementById('denyLocation').addEventListener('click', function() {
+                hideLocationModal();
+            });
+            document.getElementById('closeLocationModal').addEventListener('click', function() {
+                hideLocationModal();
+            });
+            
+            // Mobile control buttons
+            document.getElementById('mobileLocate').addEventListener('click', function() {
+                locateUser(false);
+            });
+            document.getElementById('mobileTrack').addEventListener('click', toggleTracking);
+            document.getElementById('mobileMenu').addEventListener('click', toggleSidebar);
+            document.getElementById('mobileNavigate').addEventListener('click', function() {
+                if (!destinationLatLng) {
+                    alert('Please set a destination location first using the search bar or by clicking on the map');
+                    return;
+                }
+                
+                if (!currentPosition) {
+                    alert('Please enable location services and wait for your position to be determined.');
+                    return;
+                }
+                
+                const button = document.getElementById('calculateRoute');
+                const originalText = button.innerHTML;
+                
+                // Show loading state
+                button.innerHTML = '<i data-feather="loader" class="w-5 h-5 animate-spin"></i><span>Calculating...</span>';
+                button.disabled = true;
+                feather.replace();
+                
+                // Start tracking if not already
+                if (!isTracking) {
+                    toggleTracking();
+                }
+                
+                // Calculate route from current position to destination
+                const currentLatLng = [currentPosition.coords.latitude, currentPosition.coords.longitude];
+                calculateRoute(currentLatLng, destinationLatLng);
+                
+                // Restore button after a delay
+                setTimeout(() => {
+                    button.innerHTML = originalText;
+                    button.disabled = false;
+                    feather.replace();
+                }, 2000);
+            });
+            
+            // Map search input handling
+            const mapSearchInput = document.getElementById('mapSearchInput');
+            mapSearchInput.addEventListener('input', function() {
+                // Update clear button visibility
+                updateSearchClearButton();
+                
+                // Clear previous timeout
+                if (searchTimeout) {
+                    clearTimeout(searchTimeout);
+                }
+                
+                // Set new timeout to search after user stops typing
+                searchTimeout = setTimeout(() => {
+                    searchLocations(this.value);
+                }, 300);
+            });
+            
+            // Map search clear button
+            document.getElementById('mapSearchClear').addEventListener('click', clearSearch);
+            
+            // Handle clicks on map search results
+            document.getElementById('mapSearchResults').addEventListener('click', function(e) {
+                const resultItem = e.target.closest('.search-result-item');
+                if (resultItem && resultItem.dataset.lat && resultItem.dataset.lng) {
+                    const lat = parseFloat(resultItem.dataset.lat);
+                    const lng = parseFloat(resultItem.dataset.lng);
+                    
+                    // Set destination marker at selected location
+                    setDestinationMarker(L.latLng(lat, lng));
+                    
+                    // Center map on selected location
+                    map.setView([lat, lng], 15);
+                    
+                    // Hide search results
+                    hideSearchResults();
+                    
+                    // Clear search input
+                    mapSearchInput.value = '';
+                    updateSearchClearButton();
+                }
+            });
+            
+            // Close search results when clicking outside
+            document.addEventListener('click', function(e) {
+                if (!e.target.closest('.map-search-container')) {
+                    hideSearchResults();
+                }
+            });
+            
+            // Calculate route button
+            document.getElementById('calculateRoute').addEventListener('click', function() {
+                if (!destinationLatLng) {
+                    alert('Please set a destination location first using the search bar or by clicking on the map');
+                    return;
+                }
+                
+                if (!currentPosition) {
+                    alert('Please enable location services and wait for your position to be determined.');
+                    return;
+                }
+                
+                const button = this;
+                const originalText = button.innerHTML;
+                
+                // Show loading state
+                button.innerHTML = '<i data-feather="loader" class="w-5 h-5 animate-spin"></i><span>Calculating...</span>';
+                button.disabled = true;
+                feather.replace();
+                
+                // Start tracking if not already
+                if (!isTracking) {
+                    toggleTracking();
+                }
+                
+                // Calculate route from current position to destination
+                const currentLatLng = [currentPosition.coords.latitude, currentPosition.coords.longitude];
+                calculateRoute(currentLatLng, destinationLatLng);
+                
+                // Restore button after a delay
+                setTimeout(() => {
+                    button.innerHTML = originalText;
+                    button.disabled = false;
+                    feather.replace();
+                }, 2000);
+            });
+            
+            // Mobile menu button
+            document.getElementById('mobileMenuBtn').addEventListener('click', toggleSidebar);
+            document.getElementById('closeSidebar').addEventListener('click', toggleSidebar);
+            document.getElementById('overlay').addEventListener('click', toggleSidebar);
+            
+            // Initialize incident learning system
+            setupIncidentLearning();
+            
+            // Fetch weather data
+            fetchWeather();
+            
+            // Initialize time
+            setInterval(updateTime, 1000);
+            updateTime();
+            
+            // Initialize feather icons and AOS
+            feather.replace();
+            AOS.init();
+            
+            // Automatically detect user location after a short delay
+            setTimeout(() => {
+                autoDetectLocation();
+            }, 1000);
+            
+            console.log('Application initialized successfully');
+        });
+    </script>
+    <script src="js/hydrants-manager.js"></script>
+</body>
+</html>

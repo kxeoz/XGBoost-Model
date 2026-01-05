@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Feature Test - Hazard Roads & Feedback</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/feather-icons"></script>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <style>
+        #map { height: 400px; width: 100%; }
+        .feature-card {
+            border-left: 4px solid #dc2626;
+            transition: all 0.3s ease;
+        }
+        .feature-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(0,0,0,0.1);
+        }
+        .status-operational { background: #10b981; }
+        .status-high { background: #ef4444; }
+        .status-medium { background: #f59e0b; }
+        .status-low { background: #6b7280; }
+    </style>
+</head>
+<body class="bg-gray-100">
+    <!-- Header -->
+    <header style="background: linear-gradient(135deg, #dc2626 0%, #991b1b 100%); color: white;" class="shadow-lg sticky top-0 z-10">
+        <div class="container mx-auto px-4 py-4">
+            <div class="flex items-center space-x-2">
+                <i data-feather="check-circle" class="w-8 h-8"></i>
+                <h1 class="text-2xl font-bold">Feature Test: Hazard Roads & Feedback</h1>
+            </div>
+        </div>
+    </header>
+
+    <div class="container mx-auto px-4 py-8">
+        <!-- Status Check -->
+        <div class="bg-white rounded-lg shadow-lg p-6 mb-6">
+            <h2 class="text-2xl font-bold mb-4 flex items-center">
+                <i data-feather="activity" class="w-6 h-6 mr-2 text-green-600"></i>
+                Backend Status
+            </h2>
+            <div id="backendStatus" class="space-y-2">
+                <div class="flex items-center space-x-2">
+                    <div class="w-3 h-3 bg-gray-400 rounded-full" id="statusIndicator"></div>
+                    <span id="statusText">Checking backend...</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Hazard Roads Section -->
+        <div class="bg-white rounded-lg shadow-lg p-6 mb-6 feature-card">
+            <h2 class="text-2xl font-bold mb-4 flex items-center">
+                <i data-feather="alert-triangle" class="w-6 h-6 mr-2 text-red-600"></i>
+                Hazard Roads Display Test
+            </h2>
+            
+            <div class="mb-4">
+                <p class="text-gray-600 mb-2">This section tests if hazard roads are loaded and displayed correctly on the map.</p>
+                <button id="loadHazardRoads" class="bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition">
+                    <i data-feather="refresh-cw" class="w-4 h-4 inline mr-2"></i>
+                    Load Hazard Roads
+                </button>
+            </div>
+
+            <!-- Map for Hazard Roads -->
+            <div id="map" class="rounded-lg border-2 border-gray-200 mb-4"></div>
+
+            <!-- Hazard Roads List -->
+            <div id="hazardRoadsList" class="space-y-3">
+                <p class="text-gray-500">Click "Load Hazard Roads" to display data</p>
+            </div>
+        </div>
+
+        <!-- Feedback Section -->
+        <div class="bg-white rounded-lg shadow-lg p-6 feature-card">
+            <h2 class="text-2xl font-bold mb-4 flex items-center">
+                <i data-feather="bar-chart-2" class="w-6 h-6 mr-2 text-blue-600"></i>
+                Comprehensive Feedback Test
+            </h2>
+            
+            <div class="mb-4">
+                <p class="text-gray-600 mb-4">Test the comprehensive feedback system by selecting an incident:</p>
+                
+                <div class="flex space-x-2 mb-4">
+                    <select id="incidentSelect" class="flex-1 p-2 border rounded-lg">
+                        <option value="">Select an incident...</option>
+                    </select>
+                    <button id="loadFeedback" class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition">
+                        <i data-feather="search" class="w-4 h-4 inline mr-2"></i>
+                        Get Feedback
+                    </button>
+                </div>
+
+                <div class="bg-blue-50 p-4 rounded-lg">
+                    <h3 class="font-semibold text-blue-800 mb-2">How to Test:</h3>
+                    <ol class="list-decimal list-inside space-y-1 text-sm text-blue-700">
+                        <li>Select an incident from the dropdown</li>
+                        <li>Click "Get Feedback" to fetch comprehensive analysis</li>
+                        <li>Review the performance analysis and improvement suggestions</li>
+                    </ol>
+                </div>
+            </div>
+
+            <!-- Feedback Display -->
+            <div id="feedbackDisplay">
+                <p class="text-gray-500">No feedback loaded yet</p>
+            </div>
+        </div>
+
+        <!-- Quick Links -->
+        <div class="bg-gradient-to-r from-red-50 to-orange-50 rounded-lg shadow-lg p-6 border-l-4 border-red-600">
+            <h2 class="text-2xl font-bold mb-4 flex items-center text-gray-800">
+                <i data-feather="link" class="w-6 h-6 mr-2 text-red-600"></i>
+                Quick Navigation
+            </h2>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <a href="dashboard.html" class="bg-white p-4 rounded-lg shadow hover:shadow-lg transition text-center">
+                    <i data-feather="map" class="w-8 h-8 mx-auto mb-2 text-red-600"></i>
+                    <h3 class="font-semibold">Dashboard</h3>
+                    <p class="text-sm text-gray-600">Main navigation system</p>
+                </a>
+                <a href="feedback-detail.html?id=1" class="bg-white p-4 rounded-lg shadow hover:shadow-lg transition text-center">
+                    <i data-feather="bar-chart-2" class="w-8 h-8 mx-auto mb-2 text-blue-600"></i>
+                    <h3 class="font-semibold">Feedback Detail</h3>
+                    <p class="text-sm text-gray-600">Detailed feedback page</p>
+                </a>
+                <a href="incidents-history.html" class="bg-white p-4 rounded-lg shadow hover:shadow-lg transition text-center">
+                    <i data-feather="list" class="w-8 h-8 mx-auto mb-2 text-green-600"></i>
+                    <h3 class="font-semibold">Incident History</h3>
+                    <p class="text-sm text-gray-600">View all incidents</p>
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        feather.replace();
+
+        const API_URL = 'http://localhost:5000/api';
+        let map;
+        let hazardLayers = [];
+
+        // Initialize Map
+        function initMap() {
+            map = L.map('map').setView([14.2791, 121.4160], 14);
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '© OpenStreetMap contributors'
+            }).addTo(map);
+        }
+
+        // Check Backend Status
+        async function checkBackendStatus() {
+            try {
+                const response = await fetch(`${API_URL}/health`);
+                if (response.ok) {
+                    document.getElementById('statusIndicator').className = 'w-3 h-3 bg-green-500 rounded-full animate-pulse';
+                    document.getElementById('statusText').textContent = '✅ Backend is running and healthy';
+                    loadIncidentsList();
+                } else {
+                    throw new Error('Backend unhealthy');
+                }
+            } catch (error) {
+                document.getElementById('statusIndicator').className = 'w-3 h-3 bg-red-500 rounded-full';
+                document.getElementById('statusText').textContent = '❌ Backend is not responding. Please start the backend server.';
+            }
+        }
+
+        // Load Hazard Roads
+        async function loadHazardRoads() {
+            try {
+                const response = await fetch(`${API_URL}/hazard-roads`);
+                const data = await response.json();
+                const hazardRoads = data.hazard_roads || [];
+
+                // Clear existing layers
+                hazardLayers.forEach(layer => map.removeLayer(layer));
+                hazardLayers = [];
+
+                // Display on map
+                hazardRoads.forEach(road => {
+                    const color = road.severity === 'high' ? '#ef4444' : 
+                                  road.severity === 'medium' ? '#f59e0b' : '#6b7280';
+
+                    const polyline = L.polyline(road.coordinates, {
+                        color: color,
+                        weight: 6,
+                        opacity: 0.7,
+                        dashArray: '10, 10'
+                    }).bindPopup(`
+                        <div class="p-2">
+                            <h4 class="font-bold text-red-800 mb-1">⚠️ ${road.name}</h4>
+                            <p class="text-sm mb-1"><strong>Reason:</strong> ${road.reason}</p>
+                            <p class="text-sm"><strong>Severity:</strong> ${road.severity.toUpperCase()}</p>
+                        </div>
+                    `).addTo(map);
+
+                    hazardLayers.push(polyline);
+                });
+
+                // Display list
+                const listHTML = hazardRoads.map(road => `
+                    <div class="bg-gray-50 p-4 rounded-lg border-l-4 border-${road.severity === 'high' ? 'red' : road.severity === 'medium' ? 'yellow' : 'gray'}-500">
+                        <div class="flex justify-between items-start">
+                            <div>
+                                <h3 class="font-bold text-gray-800">${road.name}</h3>
+                                <p class="text-sm text-gray-600 mt-1">${road.reason}</p>
+                            </div>
+                            <span class="px-3 py-1 text-xs font-semibold rounded-full status-${road.severity} text-white">
+                                ${road.severity.toUpperCase()}
+                            </span>
+                        </div>
+                    </div>
+                `).join('');
+
+                document.getElementById('hazardRoadsList').innerHTML = hazardRoads.length > 0 
+                    ? `<h3 class="font-semibold mb-3">Loaded ${hazardRoads.length} Hazard Roads:</h3>${listHTML}`
+                    : '<p class="text-gray-500">No hazard roads found</p>';
+
+                showNotification(`✅ Loaded ${hazardRoads.length} hazard roads`);
+            } catch (error) {
+                console.error('Error loading hazard roads:', error);
+                showNotification('❌ Error loading hazard roads', true);
+            }
+        }
+
+        // Load Incidents List
+        async function loadIncidentsList() {
+            try {
+                const response = await fetch(`${API_URL}/incidents`);
+                const data = await response.json();
+                const incidents = data.incidents || [];
+
+                const select = document.getElementById('incidentSelect');
+                select.innerHTML = '<option value="">Select an incident...</option>' +
+                    incidents.slice(-10).reverse().map((inc, idx) => `
+                        <option value="${inc.id || idx + 1}">
+                            Incident #${inc.id || idx + 1} - ${inc.type || 'Unknown'} at ${inc.location || 'Unknown'}
+                        </option>
+                    `).join('');
+            } catch (error) {
+                console.error('Error loading incidents:', error);
+            }
+        }
+
+        // Load Comprehensive Feedback
+        async function loadFeedback() {
+            const incidentId = document.getElementById('incidentSelect').value;
+            
+            if (!incidentId) {
+                showNotification('Please select an incident first', true);
+                return;
+            }
+
+            document.getElementById('feedbackDisplay').innerHTML = `
+                <div class="text-center py-8">
+                    <div class="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+                    <p class="mt-4 text-gray-600">Loading feedback...</p>
+                </div>
+            `;
+
+            try {
+                const response = await fetch(`${API_URL}/comprehensive-feedback?incident_id=${incidentId}`);
+                const feedback = await response.json();
+
+                displayFeedback(feedback);
+                showNotification('✅ Feedback loaded successfully');
+            } catch (error) {
+                console.error('Error loading feedback:', error);
+                document.getElementById('feedbackDisplay').innerHTML = `
+                    <div class="bg-red-50 border-l-4 border-red-500 p-4 rounded">
+                        <p class="text-red-700">❌ Error loading feedback: ${error.message}</p>
+                    </div>
+                `;
+                showNotification('❌ Error loading feedback', true);
+            }
+        }
+
+        // Display Feedback
+        function displayFeedback(feedback) {
+            const analysis = feedback.performance_analysis || {};
+            const suggestions = feedback.improvement_suggestions || [];
+
+            const html = `
+                <div class="space-y-4">
+                    <!-- Performance Summary -->
+                    <div class="bg-blue-50 border-l-4 border-blue-500 p-4 rounded">
+                        <h3 class="font-bold text-blue-800 mb-2">📊 Performance Analysis</h3>
+                        <p class="text-blue-700">${analysis.message || 'No analysis available'}</p>
+                        <div class="mt-3 grid grid-cols-2 gap-2 text-sm">
+                            <div><strong>Status:</strong> ${analysis.status || 'N/A'}</div>
+                            <div><strong>Improvement:</strong> ${analysis.improvement_opportunity ? analysis.improvement_opportunity.toFixed(1) + ' min' : 'N/A'}</div>
+                        </div>
+                    </div>
+
+                    <!-- Improvement Suggestions -->
+                    ${suggestions.length > 0 ? `
+                        <div>
+                            <h3 class="font-bold text-gray-800 mb-3">💡 Improvement Suggestions</h3>
+                            <div class="space-y-3">
+                                ${suggestions.map(sug => `
+                                    <div class="bg-white border-l-4 border-${
+                                        sug.priority === 'high' ? 'red' : 
+                                        sug.priority === 'medium' ? 'yellow' : 'blue'
+                                    }-500 p-4 rounded shadow">
+                                        <div class="flex justify-between items-start mb-2">
+                                            <h4 class="font-semibold text-gray-800">${sug.title}</h4>
+                                            <span class="px-2 py-1 text-xs font-semibold rounded bg-${
+                                                sug.priority === 'high' ? 'red' : 
+                                                sug.priority === 'medium' ? 'yellow' : 'blue'
+                                            }-100">
+                                                ${sug.priority.toUpperCase()}
+                                            </span>
+                                        </div>
+                                        <p class="text-sm text-gray-600 mb-2">${sug.description}</p>
+                                        <div class="mt-2">
+                                            <strong class="text-xs text-gray-700">Action Steps:</strong>
+                                            <ul class="text-xs text-gray-600 list-disc list-inside mt-1">
+                                                ${(sug.actionable_steps || []).map(step => `<li>${step}</li>`).join('')}
+                                            </ul>
+                                        </div>
+                                    </div>
+                                `).join('')}
+                            </div>
+                        </div>
+                    ` : '<p class="text-gray-500">No improvement suggestions available</p>'}
+                </div>
+            `;
+
+            document.getElementById('feedbackDisplay').innerHTML = html;
+        }
+
+        // Show Notification
+        function showNotification(message, isError = false) {
+            const notification = document.createElement('div');
+            notification.className = `fixed top-20 right-4 z-50 px-6 py-4 rounded-lg shadow-lg ${
+                isError ? 'bg-red-500' : 'bg-green-500'
+            } text-white`;
+            notification.textContent = message;
+            document.body.appendChild(notification);
+
+            setTimeout(() => {
+                notification.remove();
+            }, 3000);
+        }
+
+        // Event Listeners
+        document.getElementById('loadHazardRoads').addEventListener('click', loadHazardRoads);
+        document.getElementById('loadFeedback').addEventListener('click', loadFeedback);
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', () => {
+            initMap();
+            checkBackendStatus();
+            feather.replace();
+        });
+    </script>
+</body>
+</html>

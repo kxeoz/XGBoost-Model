@@ -1,0 +1,52 @@
+[
+  {
+    "id": 1,
+    "number": "H-001",
+    "address": "Brgy. Poblacion 1, Santa Cruz, Laguna",
+    "latitude": 14.280248,
+    "longitude": 121.394529,
+    "status": "operational",
+    "remarks": "Low Pressure",
+    "created_at": "2026-01-04T19:55:17.836084"
+  },
+  {
+    "id": 2,
+    "number": "H-002",
+    "address": "Near Public Market, Santa Cruz, Laguna",
+    "latitude": 14.280069,
+    "longitude": 121.394703,
+    "status": "operational",
+    "remarks": "High Pressure",
+    "created_at": "2026-01-05T18:40:00.000000"
+  },
+  {
+    "id": 3,
+    "number": "H-003",
+    "address": "Capitol Village, Brgy. Gatid, Santa Cruz, Laguna",
+    "latitude": 14.273128,
+    "longitude": 121.400478,
+    "status": "operational",
+    "remarks": "High Pressure",
+    "created_at": "2026-01-05T18:40:00.000000"
+  },
+  {
+    "id": 4,
+    "number": "H-004",
+    "address": "Brgy. Calios, Santa Cruz, Laguna",
+    "latitude": 14.271956,
+    "longitude": 121.399617,
+    "status": "unserviceable",
+    "remarks": "Needs Repair",
+    "created_at": "2026-01-05T18:40:00.000000"
+  },
+  {
+    "id": 5,
+    "number": "H-005",
+    "address": "Brgy. Duhat, Santa Cruz, Laguna",
+    "latitude": 14.26305,
+    "longitude": 121.40111,
+    "status": "operational",
+    "remarks": "High Pressure",
+    "created_at": "2026-01-05T18:40:00.000000"
+  }
+]
